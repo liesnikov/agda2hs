@@ -60,7 +60,7 @@ import Haskell.Prim.Ord
 import Haskell.Prim.Word
 import Haskell.Prim.Traversable
 import Haskell.Prim.Integer
-import Haskell.Prim.Thunk
+--import Haskell.Prim.Thunk
 import Haskell.Prim.Absurd
 import Haskell.Prim.String
 import Haskell.Prim.Enum
