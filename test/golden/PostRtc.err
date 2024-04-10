@@ -1,0 +1,2 @@
+error: [GenericDocError]
+Illegal module name Fail.PostRtc, conflicts with name generated for runtime checks.
