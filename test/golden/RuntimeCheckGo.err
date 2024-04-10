@@ -1,0 +1,2 @@
+test/Fail/RuntimeCheckGo.agda:6.1-9: error: [GenericDocError]
+Illegal name go0, conflicts with name generated for runtime checks.

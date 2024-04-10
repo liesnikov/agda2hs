@@ -97,3 +97,7 @@ import Issue346
 import Issue408
 import CompileTo
 
+import RuntimeCheckCallFeatures
+import RuntimeCheckUseCases
+import RuntimeCheckAutoImport
+

@@ -1,0 +1,2 @@
+test/Fail/RuntimeCheckClass.agda:12.8-15: error: [GenericDocError]
+Cannot compile NoClass to class. Classes cannot have erased arguments with runtime checking.
