@@ -33,7 +33,8 @@ import Agda.TypeChecking.Warnings ( warning )
 
 import qualified Agda.Utils.List1 as List1
 import Agda.Utils.Maybe ( isJust, isNothing, whenJust, fromMaybe, caseMaybeM )
-import Agda.Utils.Monad ( orM, whenM )
+
+import Agda.Utils.Monad ( orM, ifNotM, whenM )
 
 import Agda2Hs.AgdaUtils
 import Agda2Hs.Compile.Types
@@ -125,21 +126,25 @@ compileQName f
       typeError $ CustomBackendError "agda2hs" $ P.text $
         "Symbol " ++ Hs.prettyPrint hf ++ " is missing a COMPILE pragma or rewrite rule"
 
+    modRtc <- ifNotM (emitsRtc f) (return mod) $ case mod of
+      Hs.ModuleName () s -> do
+        return $ Hs.ModuleName () $ s ++ ".PostRtc"
     currMod <- hsTopLevelModuleName <$> asks currModule
     let skipModule = mod == currMod
                   || isJust mimpBuiltin
                   || prettyShow mod0 `elem` primMonadModules
     qual <- if | skipModule -> return Unqualified
-               | otherwise  -> getQualifier (fromMaybe f parent) mod
+               | otherwise  -> getQualifier (fromMaybe f parent) modRtc
     -- we only calculate this when dealing with type operators; usually that's where 'type' prefixes are needed in imports
     namespace <- (case hf of
           Hs.Symbol _ _ -> getNamespace f
           Hs.Ident  _ _ -> return (Hs.NoNamespace ()))
     let
+
       -- We don't generate "import Prelude" for primitive modules,
       -- unless a name is qualified.
       mimp = if mkind /= PrimModule || isQualified qual
-             then Just (Import mod qual par hf namespace)
+             then Just (Import modRtc qual par hf namespace)
              else Nothing
       qf = qualify mod hf qual
 
@@ -153,7 +158,7 @@ compileQName f
       ++ "\nhaskell name: " ++ Hs.prettyPrint hf
       ++ "\nparent name: " ++ prettyShow parent
       ++ "\nmod0: " ++ prettyShow mod0
-      ++ "\nmodule name: " ++ Hs.prettyPrint mod
+      ++ "\nmodule name: " ++ Hs.prettyPrint modRtc
       ++ "\ncurrent module: " ++ Hs.prettyPrint currMod
       ++ "\nqualifier: " ++ prettyShow (fmap (fmap pp) qual)
       ++ "\n(qualified) haskell name: " ++ pp qf
