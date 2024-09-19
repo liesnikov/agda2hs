@@ -20,14 +20,14 @@
             '';
             src = ./.;
           };
-        agda2hs-pkg = options:
-          pkgs.haskellPackages.haskellSrc2nix {
+        agda2hs-pkg = pkgs.haskellPackages.haskellSrc2nix {
             name = "agda2hs";
             src = ./.;
-            extraCabal2nixOptions = options; #"--jailbreak"
+            # jailbreaking here because otherwise aeson has to be overridden
+            # and that triggers recompilation of a lot of dependencies
+            extraCabal2nixOptions = ""; #"--jailbreak"
         };
-        # jailbreaking here because otherwise aeson has to be overridden and that triggers recompilation of a lot of dependencies
-        agda2hs-hs = pkgs.haskellPackages.callPackage (agda2hs-pkg "--jailbreak") {};
+        agda2hs-hs = pkgs.haskellPackages.callPackage agda2hs-pkg {};
         agda2hs-expr = import ./agda2hs.nix;
         agda2hs = pkgs.callPackage agda2hs-expr {
             inherit self;
