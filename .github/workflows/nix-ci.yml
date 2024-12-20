@@ -12,6 +12,8 @@ on:
       - 'agda2hs.cabal'
       - 'cabal.project'
       - 'Makefile'
+      - 'flake.*'
+      - 'nix/*'
       - '.github/workflows/**.yml'
     branches: [master]
 
