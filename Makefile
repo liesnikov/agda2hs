@@ -1,6 +1,9 @@
 .PHONY : install agda repl libHtml test testContainers testHtml golden docs
 FILES = $(shell find src -type f)
 
+build :
+	cabal build
+
 install :
 	cabal install --overwrite-policy=always
 
