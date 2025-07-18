@@ -7,9 +7,6 @@ import RuntimeCheckAutoImport.PostRtc
 
 simpleFun :: Natural -> Natural
 simpleFun x
-  | Haskell.Extra.Dec.Instances.decIsTrue (x > 0) =
-    RuntimeCheckAutoImport.PostRtc.simpleFun x
-  | otherwise =
-    error
-      "Runtime check failed: Haskell.Extra.Dec.Instances.decIsTrue (x > 0)"
+  | x > 0 = RuntimeCheckAutoImport.PostRtc.simpleFun x
+  | otherwise = error "Runtime check failed: x > 0"
 
