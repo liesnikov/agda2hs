@@ -1,6 +1,5 @@
 module RuntimeCheckAutoImport (RuntimeCheckAutoImport.simpleFun) where
 
-import qualified Haskell.Extra.Dec.Instances (decIsTrue)
 import Numeric.Natural (Natural)
 
 import RuntimeCheckAutoImport.PostRtc
