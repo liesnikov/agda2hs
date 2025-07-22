@@ -13,7 +13,7 @@ import Agda.Syntax.Translation.ConcreteToAbstract (ToAbstract (toAbstract))
 import Agda.TypeChecking.InstanceArguments (findInstance)
 import Agda.TypeChecking.MetaVars (newInstanceMeta, newLevelMeta)
 import Agda.TypeChecking.Monad
-import Agda.TypeChecking.Pretty (PrettyTCM (prettyTCM), (<+>))
+import Agda.TypeChecking.Pretty (PrettyTCM (prettyTCM), (<+>), pretty, prettyA)
 import Agda.TypeChecking.Reduce (instantiate)
 import Agda.TypeChecking.Substitute (telView', theTel)
 import Agda.TypeChecking.Telescope (splitTelescopeAt)
@@ -40,15 +40,18 @@ import qualified Language.Haskell.Exts as Hs
 -- based on Agda.Syntax.Translation.ConcreteToAbstract.importPrimitives
 importDec :: TCM ()
 importDec = do
-  let haskellExtra = AN.Qual (AC.simpleName "Haskell") . AN.Qual (AC.simpleName "Extra")
-      decname = AC.simpleName "Dec"
+  -- these args to NiceEnv shouldn't be used
+  let niceEnv = NiceEnv __IMPOSSIBLE__ __IMPOSSIBLE__
+      qualify = AN.Qual (AC.simpleName "Haskell") . AN.Qual (AC.simpleName "Extra")
+      decname = AC.QName $ AC.simpleName "Dec"
       directives = ImportDirective noRange UseEverything [] [] Nothing
-      importDecl q = [AC.Import noRange (haskellExtra q) Nothing AC.DontOpen directives]
-      decl = importDecl $ AC.QName decname
-      nicedec = fst $ runNice (NiceEnv True AC.NoWhere_) $ niceDeclarations empty decl
-  ads <- case nicedec of
+      cdecl = [AC.Import noRange (qualify decname) Nothing AC.DontOpen directives]
+  reportSDoc "agda2hs.rtc.import" 30 $ "Formed an import statement: " <+> pretty cdecl
+  let ndecl = fst . runNice niceEnv $ niceDeclarations empty cdecl
+  ads <- case ndecl of
     Left _ -> __IMPOSSIBLE__
     Right ds -> toAbstract ds
+  reportSDoc "agda2hs.rtc.import" 30 $ "Formed an abstract import: " <+> prettyA ads
   return ()
 
 -- Retrieve constructor name and generated smart constructor qname.
