@@ -1,6 +1,5 @@
 module RuntimeCheckFeatures (noneErasedFun, simpleFunCaller, singleEven, Dat(NoneErasedCon), Rec(recFst, recSnd), Newt(theField), NoneErasedNewt(noneErasedField, NoneErasedNewt), ErasedField(erasedFst), fUnzip, RuntimeCheckFeatures.simpleFun, RuntimeCheckFeatures.doubleOdd, RuntimeCheckFeatures.tripleOdd, RuntimeCheckFeatures.scCon, RuntimeCheckFeatures.scRec, RuntimeCheckFeatures.scNewt, RuntimeCheckFeatures.scErasedField) where
 
-import Haskell.Extra.Dec.Instances (decIsFalse, decIsTrue)
 import Numeric.Natural (Natural)
 
 import RuntimeCheckFeatures.PostRtc

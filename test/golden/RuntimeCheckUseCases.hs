@@ -1,6 +1,5 @@
 module RuntimeCheckUseCases (RuntimeCheckUseCases.subtractFromGreater, RuntimeCheckUseCases.headOfNonEmpty) where
 
-import Haskell.Extra.Dec.Instances (decIsFalse, decNonEmpty)
 import Numeric.Natural (Natural)
 
 import RuntimeCheckUseCases.PostRtc
