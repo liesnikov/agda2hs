@@ -1,6 +1,5 @@
 module RuntimeCheckFeatures.PostRtc where
 
-import Haskell.Extra.Dec.Instances (decIsFalse, decIsTrue)
 import Numeric.Natural (Natural)
 
 noneErasedFun :: Natural -> Natural
