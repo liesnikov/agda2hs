@@ -1,4 +1,6 @@
-.PHONY : install agda repl libHtml test testContainers testHtml golden docs
+.PHONY : build install agda repl clean
+.PHONY: libHtml docs
+.PHONY: test testContainers test/html test/clean golden
 FILES = $(shell find src -type f)
 
 build :
@@ -26,13 +28,16 @@ testContainers:
 test : checkWhitespace test/agda2hs testContainers
 	make -C test
 
-testHtml : test/agda2hs
+test/html : test/agda2hs
 	make -C test html
 
 golden :
 	make -C test golden
 
-clean :
+clean : test/clean
+	cabal clean
+
+test/clean :
 	make -C test clean
 
 docs :
