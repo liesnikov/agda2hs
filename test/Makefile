@@ -11,7 +11,7 @@ default : compare
 
 build/%.hs : %.agda *.agda Fail/*.agda Cubical/*.agda agda2hs
 	@echo == Compiling tests ==
-	(rtc=$$(echo $< | grep RuntimeCheck); $(AGDA2HS) $${rtc:+--runtime-check} $< -o build)
+	(rtc=$$(echo $< | grep RuntimeCheck); $(AGDA2HS) -vimport.visit:10 -vimport.iface.options:30 $${rtc:+--runtime-check  -vimport.visit:10 -vagda2hs.rtc.import:40 -vagda2hs.compile.import:40 -vimport.iface.options:30} $< -o build)
 
 allTests : build/$(MAIN).hs build/$(MAIN_RTC).hs
 	@echo == Running ghc ==
