@@ -92,7 +92,7 @@ compile
   :: GlobalEnv -> ModuleEnv -> IsMain -> Definition
   -> TCM (RtcDefs, CompileOutput)
 compile genv tlm _ def = do
-  when rtc importDec
+  --when rtc importDec
   withCurrentModule (qnameModule qname)
     $ runC genv tlm rtc (optRewrites opts)
     $ setCurrentRangeQ qname

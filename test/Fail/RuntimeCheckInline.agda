@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckInline where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 inlinable : Nat
 inlinable = 0
