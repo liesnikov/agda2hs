@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckTuple where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 record CanTuple : Set where
   field tupleField : Nat

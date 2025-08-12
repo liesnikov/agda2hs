@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckSc where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 data Dat : Set where
   Conflict : ((x : Nat) ⦃@0 _ : IsTrue (x > 0)⦄ → Nat) → Dat

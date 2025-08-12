@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckTransparent where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 transparent : Nat → Nat
 transparent n = n

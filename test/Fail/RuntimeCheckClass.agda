@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckClass where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 record Class : Set where
   field
