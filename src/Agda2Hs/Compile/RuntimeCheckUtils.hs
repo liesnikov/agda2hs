@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc, showOptions ) where
+module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc) where
 
 import Agda.Syntax.Common
 import Agda.Syntax.Common.Pretty (prettyShow)
@@ -13,7 +13,7 @@ import Agda.Syntax.Translation.ConcreteToAbstract (ToAbstract (toAbstract))
 import Agda.TypeChecking.InstanceArguments (findInstance)
 import Agda.TypeChecking.MetaVars (newInstanceMeta, newLevelMeta)
 import Agda.TypeChecking.Monad
-import Agda.TypeChecking.Pretty (PrettyTCM (prettyTCM), (<+>), pretty, prettyA, text, prettyList, Doc )
+import Agda.TypeChecking.Pretty (PrettyTCM (prettyTCM), (<+>), pretty, prettyA)
 import Agda.TypeChecking.Reduce (instantiate)
 import Agda.TypeChecking.Substitute (telView', theTel)
 import Agda.TypeChecking.Telescope (splitTelescopeAt)
@@ -23,7 +23,6 @@ import qualified Agda.Utils.List1 as List1
 import Agda.Utils.Monad (allM, partitionM, unless)
 import Agda2Hs.AgdaUtils (testResolveStringName, resolveStringName)
 
-import Agda.Interaction.Options (InfectiveCoinfectiveOption(icOptionActive, icOptionDescription), infectiveCoinfectiveOptions, PragmaOptions)
 import Agda2Hs.Compile.Term (compileTerm)
 import Agda2Hs.Compile.Type (DomOutput (DODropped), compileDom)
 import Agda2Hs.Compile.Types (C)
@@ -49,22 +48,12 @@ importDec = do
       directives = ImportDirective noRange UseEverything [] [] Nothing
       cdecl = [AC.Import noRange (qualify decname) Nothing AC.DontOpen directives]
   reportSDoc "agda2hs.rtc.import" 30 $ "Formed an import statement: " <+> pretty cdecl
-  setCommandLineOptions . stPersistentOptions . stPersistentState =<< getTC
-  currentOptions <- useTC stPragmaOptions
-  reportSDoc "agda2hs.rtc.import" 25 $ "Current options are" <+> showOptions currentOptions
   let ndecl = fst . runNice niceEnv $ niceDeclarations empty cdecl
   ads <- case ndecl of
     Left _ -> __IMPOSSIBLE__
     Right ds -> toAbstract ds
   reportSDoc "agda2hs.rtc.import" 30 $ "Formed an abstract import: " <+> prettyA ads
   return ()
-
-showOptions :: PragmaOptions  -> TCM Doc
-showOptions opts =
-  prettyList $
-  map (\opt -> (text (icOptionDescription opt) <> ": ") <+>
-                pretty (icOptionActive opt opts))
-    infectiveCoinfectiveOptions
 
 -- Retrieve constructor name and generated smart constructor qname.
 -- Takes extra argument whether one additional name should be stripped

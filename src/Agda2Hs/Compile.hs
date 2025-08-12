@@ -30,7 +30,7 @@ import Agda2Hs.Compile.Function ( compileFun, checkTransparentPragma, checkInlin
 import Agda2Hs.Compile.Name ( hsTopLevelModuleName )
 import Agda2Hs.Compile.Postulate ( compilePostulate )
 import Agda2Hs.Compile.Record ( compileRecord, checkUnboxPragma, checkTuplePragma )
-import Agda2Hs.Compile.RuntimeCheckUtils ( importDec, showOptions )
+import Agda2Hs.Compile.RuntimeCheckUtils ( importDec )
 import Agda2Hs.Compile.Types
 import Agda2Hs.Compile.Utils
 import Agda2Hs.Config
@@ -95,7 +95,7 @@ compile genv tlm _ def = do
   withCurrentModule (qnameModule qname)
     $ runC genv tlm rtc (optRewrites opts)
     $ setCurrentRangeQ qname
-    $ (when rtc (liftTCM importDec)) *> compileAndTag <* postCompile
+    $ compileAndTag <* postCompile -- this is where importDec would be
   where
     opts = globalOptions genv
     qname = defName def
@@ -107,9 +107,7 @@ compile genv tlm _ def = do
     compileAndTag :: C RtcDefs
     compileAndTag = (tag <$>) <$> do
       p <- processPragma qname
-      pure $ setCommandLineOptions . stPersistentOptions . stPersistentState =<< getTC
-      currentOptions <- useTC stPragmaOptions
-      reportSDoc "agda2hs.compile.import" 25 $ "Current options are" <+> showOptions currentOptions
+
       reportSDoc "agda2hs.compile" 5  $ text "Compiling definition:" <+> prettyTCM qname
       reportSDoc "agda2hs.compile" 45 $ text "Pragma:" <+> text (show p)
       reportSDoc "agda2hs.compile" 65 $ text "Compiling definition:" <+> pretty (theDef def)
