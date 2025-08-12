@@ -1,6 +1,7 @@
 module Fail.RuntimeCheckUnboxed where
 
 open import Haskell.Prelude
+open import Haskell.Extra.Dec
 
 record Unboxable : Set where
   -- The erasure is in an evenly nested position, keeping the record unboxable.
