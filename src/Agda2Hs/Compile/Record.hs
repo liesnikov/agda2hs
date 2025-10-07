@@ -113,7 +113,7 @@ compileRecord target def = do
               [asst] | not (isQuantifiedAsst asst) -> Just (Hs.CxSingle () asst)
               assts  -> Just (Hs.CxTuple () assts)
         defaultDecls <- compileMinRecords def ms
-        return $ Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))
+        pure $ Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))
       ToRecord newtyp ds -> do
         checkValidConName cName
         when (theEtaEquality recEtaEquality' == YesEta) $ agda2hsErrorM $
