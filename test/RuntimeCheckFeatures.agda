@@ -46,6 +46,7 @@ data Dat : Set where
 
 -- Term variables in type parameter not supported, so not showcased here
 record Rec : Set where
+  no-eta-equality
   field
     recFst : Nat
     recSnd : @0 IsTrue (recFst > 0) → Nat
@@ -53,18 +54,21 @@ open Rec public
 {-# COMPILE AGDA2HS Rec #-}
 
 record Newt : Set where
+  no-eta-equality
   field
     theField : (x : Nat) → @0 IsTrue (x > 0) → Nat
 open Newt public
 {-# COMPILE AGDA2HS Newt newtype #-}
 
 record NoneErasedNewt : Set where
+  no-eta-equality
   field
     noneErasedField : Nat
 open NoneErasedNewt public
 {-# COMPILE AGDA2HS NoneErasedNewt newtype #-}
 
 record ErasedField : Set where
+  no-eta-equality
   field
     erasedFst : Nat
     @0 erasedSnd : IsTrue (erasedFst > 0)
