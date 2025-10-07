@@ -18,6 +18,7 @@ import qualified Language.Haskell.Exts as Hs
 
 import System.FilePath ( (</>) )
 
+import Agda.Interaction.BasicOps ( parseName )
 import Agda.Compiler.Backend hiding ( Args )
 import Agda.Compiler.Common ( compileDir )
 
@@ -26,6 +27,7 @@ import qualified Agda.Syntax.Concrete.Name as C
 import Agda.Syntax.Internal
 import Agda.Syntax.Position ( noRange )
 import Agda.Syntax.Scope.Base
+import Agda.Syntax.Scope.Monad ( bindVariable, freshConcreteName, isDatatypeModule, resolveName )
 import Agda.Syntax.Scope.Monad ( bindVariable, freshConcreteName, isDatatypeModule )
 import Agda.Syntax.TopLevelModuleName
 import Agda.Syntax.Common.Pretty ( prettyShow )
@@ -420,3 +422,17 @@ maybePrependFixity n f comp | f /= noFixity = do
         RightAssoc -> Hs.AssocRight ()
   (Hs.InfixDecl () hsAssoc hsLvl [Hs.VarOp () x]:) <$> comp
 maybePrependFixity n f comp = comp
+
+testResolveStringName :: String -> C (Maybe QName)
+testResolveStringName s = do
+  cqname <- liftTCM $ parseName noRange s
+  rname <- liftTCM $ resolveName cqname
+  case rname of
+    DefinedName _ aname _ -> return $ Just $ anameName aname
+    _ -> return Nothing
+
+resolveStringName :: String -> C QName
+resolveStringName s = do
+  testResolveStringName s >>= \case
+    Just aname -> return aname
+    Nothing -> genericDocError =<< text ("Couldn't find " ++ s)
