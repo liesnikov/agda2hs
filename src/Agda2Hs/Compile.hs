@@ -114,25 +114,24 @@ compile genv tlm _ def =
       reportSDoc "agda2hs.compile" 15  $ text "Is instance?" <+> prettyTCM isInstance
 
       case (p , theDef def) of
-        (NoPragma            , _         ) -> return []
-        (ExistingClassPragma , _         ) -> return []
-        (UnboxPragma s       , Record{}  ) -> [] <$ checkUnboxPragma def
-        (TransparentPragma   , Function{}) -> [] <$ checkTransparentPragma def
-        (InlinePragma        , Function{}) -> [] <$ checkInlinePragma def
-        (TuplePragma b       , Record{}  ) -> return []
-        (CompileToPragma s   , Datatype{}) -> [] <$ checkCompileToDataPragma def s
-        (CompileToPragma s   , Function{}) -> [] <$ checkCompileToFunctionPragma def s
-
-        (ClassPragma ms      , Record{}  ) -> pure <$> compileRecord (ToClass ms) def
-        (NewTypePragma ds    , Record{}  ) -> pure <$> compileRecord (ToRecord True ds) def
+        (NoPragma            , _         ) -> cnil
+        (ExistingClassPragma , _         ) -> cnil
+        (UnboxPragma s       , Record{}  ) -> cnil <* checkUnboxPragma def
+        (TransparentPragma   , Function{}) -> cnil <* checkTransparentPragma def
+        (InlinePragma        , Function{}) -> cnil <* checkInlinePragma def
+        (TuplePragma b       , Record{}  ) -> cnil
+        (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
+        (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
+        (ClassPragma ms      , Record{}  ) -> cone $ compileRecord (ToClass ms) def
+        (NewTypePragma ds    , Record{}  ) -> cone $ compileRecord (ToRecord True ds) def
         (NewTypePragma ds    , Datatype{}) -> compileData True ds def
         (DefaultPragma ds    , Datatype{}) -> compileData False ds def
-        (DerivePragma s      , _         ) | isInstance -> pure <$> compileInstance (ToDerivation s) def
-        (DefaultPragma _     , Axiom{}   ) | isInstance -> pure <$> compileInstance (ToDerivation Nothing) def
-        (DefaultPragma _     , _         ) | isInstance -> pure <$> compileInstance ToDefinition def
+        (DerivePragma s      , _         ) | isInstance -> cone $ compileInstance (ToDerivation s) def
+        (DefaultPragma _     , Axiom{}   ) | isInstance -> cone $ compileInstance (ToDerivation Nothing) def
+        (DefaultPragma _     , _         ) | isInstance -> cone $ compileInstance ToDefinition def
         (DefaultPragma _     , Axiom{}   ) -> compilePostulate def
         (DefaultPragma _     , Function{}) -> compileFun True def
-        (DefaultPragma ds    , Record{}  ) -> pure <$> compileRecord (ToRecord False ds) def
+        (DefaultPragma ds    , Record{}  ) -> cone $ compileRecord (ToRecord False ds) def
 
         _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
 

@@ -398,6 +398,17 @@ checkNoAsPatterns = \case
     checkPatternInfo i = unless (null $ patAsNames i) $
       agda2hsError "not supported: as patterns"
 
+-- Uniform compilation output
+
+cnil :: C [a]
+cnil = pure []
+
+cone :: C a -> C [a]
+cone a = pure <$> a
+
+cpure :: a -> C [a]
+cpure = cone . pure
+
 -- Add a non-declaration compiled output
 
 tellImport :: Import -> C ()
