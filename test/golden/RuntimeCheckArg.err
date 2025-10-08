@@ -1,0 +1,2 @@
+test/Fail/RuntimeCheckArg.agda:6.1-9: error: [GenericDocError]
+Illegal name a1, conflicts with name generated for runtime checks.
