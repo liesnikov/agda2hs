@@ -54,7 +54,7 @@ compileMinRecord fieldNames m = withMinRecord m $ do
   -- * it has an explicit dictionary argument
   -- * it's using the fields and definitions from the minimal record and not the parent record
   compiled <- addContext (defaultDom rtype) $ compileLocal $
-    concatMap defn <$> traverse (compileFun False) defaults
+    concatMap (fmap unrtc) <$> traverse (compileFun False) defaults
   let declMap = Map.fromList [ (definedName c, def) | def@(Hs.FunBind _ (c : _)) <- compiled ]
   reportSDoc "agda2hs.record.min" 20 $
     text "Done compiling minimal record" <+> pretty m <+>
@@ -98,7 +98,7 @@ compileMinRecords def sls = do
   return ([minPragma | not (null prims)] ++ Map.elems decls)
 
 
-compileRecord :: RecordTarget -> Definition -> C RtcDecls
+compileRecord :: RecordTarget -> Definition -> C [WDecl]
 compileRecord target def = do
   TelV tel _ <- telViewUpTo recPars (defType def)
   addContext tel $ do
@@ -118,8 +118,8 @@ compileRecord target def = do
               [asst] | not (isQuantifiedAsst asst) -> Just (Hs.CxSingle () asst)
               assts  -> Just (Hs.CxTuple () assts)
         defaultDecls <- compileMinRecords def ms
-        --pure $ Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))
-        return $ WithRtc [Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))] []
+        let cd = Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))
+        return $ mkIRtc cd : map mkERtc []
       ToRecord newtyp ds -> do
         smartQName <- smartConstructor (defName def) False
 
@@ -142,7 +142,8 @@ compileRecord target def = do
 
         when newtyp $ checkNewtypeCon cName fieldDecls
         let target = if newtyp then Hs.NewType () else Hs.DataType ()
-        (\c -> WithRtc [c] chk) <$> compileDataRecord constraints fieldDecls target hd ds
+        drc <- compileDataRecord constraints fieldDecls target hd ds
+        return $ mkIRtc drc : map mkERtc chk
   where
     rString = prettyShow $ qnameName $ defName def
     rName = hsName rString

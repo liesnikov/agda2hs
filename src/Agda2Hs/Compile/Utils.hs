@@ -418,7 +418,7 @@ addTyBang Strict ty = tellExtension Hs.BangPatterns >>
   return (Hs.TyBang () (Hs.BangedTy ()) (Hs.NoUnpackPragma ()) ty)
 addTyBang Lazy   ty = return ty
 
-maybePrependFixity :: QName -> Fixity -> C RtcDecls -> C RtcDecls
+maybePrependFixity :: QName -> Fixity -> C [WDecl] -> C [WDecl]
 maybePrependFixity n f comp | f /= noFixity = do
   hsLvl <- checkFixityLevel n (fixityLevel f)
   let x = hsName $ prettyShow $ qnameName n
@@ -426,8 +426,7 @@ maybePrependFixity n f comp | f /= noFixity = do
         NonAssoc   -> Hs.AssocNone ()
         LeftAssoc  -> Hs.AssocLeft ()
         RightAssoc -> Hs.AssocRight ()
-  let head = (Hs.InfixDecl () hsAssoc hsLvl [Hs.VarOp () x]:)
-  (head <$>) <$> comp
+  (mkOut (Hs.InfixDecl () hsAssoc hsLvl [Hs.VarOp () x]):) <$> comp
 maybePrependFixity n f comp = comp
 
 testResolveStringName :: String -> C (Maybe QName)

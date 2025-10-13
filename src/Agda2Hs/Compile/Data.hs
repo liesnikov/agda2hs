@@ -45,7 +45,7 @@ checkNewtype name cs = do
     (Hs.QualConDecl () _ _ (Hs.ConDecl () cName types):_) -> checkNewtypeCon cName types
     _ -> __IMPOSSIBLE__
 
-compileData :: AsNewType -> [Hs.Deriving ()] -> Definition -> C RtcDecls
+compileData :: AsNewType -> [Hs.Deriving ()] -> Definition -> C [WDecl]
 compileData newtyp ds def = do
   let prettyName = prettyShow $ qnameName $ defName def
       d = hsName prettyName
@@ -71,7 +71,7 @@ compileData newtyp ds def = do
 
     when newtyp (checkNewtype d cs)
 
-    return $ WithRtc [Hs.DataDecl () target Nothing hd cs ds] chks
+    return $ mkIRtc (Hs.DataDecl () target Nothing hd cs ds) : map mkERtc chks
   where
     allIndicesErased :: Type -> C ()
     allIndicesErased t = reduce (unEl t) >>= \case
