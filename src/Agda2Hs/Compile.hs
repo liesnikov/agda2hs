@@ -90,7 +90,7 @@ moduleSetup genv _ m mifile = do
 
 compile
   :: GlobalEnv -> ModuleEnv -> IsMain -> Definition
-  -> TCM (RtcDefs, CompileOutput)
+  -> TCM (CompiledDef, CompileOutput)
 compile genv tlm _ def = do
   withCurrentModule (qnameModule qname)
     $ runC genv tlm rtc (optRewrites opts)
@@ -104,8 +104,8 @@ compile genv tlm _ def = do
     tag []   = []
     tag code = [(nameBindingSite $ qnameName qname, code)]
 
-    compileAndTag :: C RtcDefs
-    compileAndTag = (tag <$>) <$> do
+    compileAndTag :: C CompiledDef
+    compileAndTag = tag <$> do
       p <- processPragma qname
 
       reportSDoc "agda2hs.compile" 5  $ text "Compiling definition:" <+> prettyTCM qname
@@ -137,38 +137,34 @@ compile genv tlm _ def = do
       --  (DefaultPragma ds    , Record{}  ) -> cone $ compileRecord (ToRecord False ds) def
       --
       --  _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
-
       case (p , theDef def) of
-        (NoPragma           , _          ) -> return $ WithRtc [] []
-        (ExistingClassPragma, _          ) -> return $ WithRtc [] []
-        (DefaultPragma _    , Function {}) | not isInstance -> compileFun True def
-        (NewTypePragma ds   , Datatype {}) -> compileData True ds def
-        (DefaultPragma ds   , Datatype {}) -> compileData False ds def
-        (ClassPragma ms     , Record {}  ) -> compileRecord (ToClass ms) def
-        (NewTypePragma ds   , Record {}  ) -> compileRecord (ToRecord True ds) def
-        (DefaultPragma ds   , Record {}  ) | not isInstance -> compileRecord (ToRecord False ds) def
-        -- ^ Names that may induce runtime checks or are safe to have none
-        _ -> do
-          tellNoErased $ prettyShow $ qnameName $ defName def
-          (`WithRtc` []) <$> case (p, theDef def) of
-            (UnboxPragma s    , Record {}  ) -> [] <$ checkUnboxPragma def
-            (TuplePragma b    , Record{}   ) -> [] <$ checkTuplePragma def
-            (TransparentPragma, Function {}) -> [] <$ checkTransparentPragma def
-            (InlinePragma     , Function {}) -> [] <$ checkInlinePragma def
-            (DerivePragma s   , _          ) | isInstance -> pure <$> compileInstance (ToDerivation s) def
-            (DefaultPragma _  , Axiom {}   ) | isInstance -> pure <$> compileInstance (ToDerivation Nothing) def
-            (DefaultPragma _  , _          ) | isInstance -> pure <$> compileInstance ToDefinition def
-            (DefaultPragma _  , Axiom {}   ) -> compilePostulate def
-            -- FIXME: this probably isn't right wrt rtc
-            (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
-            (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
-            _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
+        (NoPragma            , _         ) -> cnil
+        (ExistingClassPragma , _         ) -> cnil
+        (UnboxPragma s       , Record{}  ) -> cnil <* checkUnboxPragma def
+        (TransparentPragma   , Function{}) -> cnil <* checkTransparentPragma def
+        (InlinePragma        , Function{}) -> cnil <* checkInlinePragma def
+        (TuplePragma b       , Record{}  ) -> cnil <* checkTuplePragma def
+         -- FIXME: this probably isn't right wrt rtc
+        (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
+        (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
+        (ClassPragma ms      , Record{}  ) -> compileRecord (ToClass ms) def
+        (NewTypePragma ds    , Record{}  ) -> compileRecord (ToRecord True ds) def
+        (NewTypePragma ds    , Datatype{}) -> compileData True ds def
+        (DefaultPragma ds    , Datatype{}) -> compileData False ds def
+        (DerivePragma s      , _         ) | isInstance -> cone $ mkOut <$> compileInstance (ToDerivation s) def
+        (DefaultPragma _     , Axiom{}   ) | isInstance -> cone $ mkOut <$> compileInstance (ToDerivation Nothing) def
+        (DefaultPragma _     , _         ) | isInstance -> cone $ mkOut <$> compileInstance ToDefinition def
+        (DefaultPragma _     , Axiom{}   ) -> map mkOut <$> compilePostulate def
+        (DefaultPragma _     , Function{}) -> compileFun True def
+        (DefaultPragma ds    , Record{}  ) -> compileRecord (ToRecord False ds) def
+        _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
+
     postCompile :: C ()
     postCompile = whenM (gets $ lcaseUsed >>> (> 0)) $ tellExtension Hs.LambdaCase
 
 verifyOutput ::
   GlobalEnv -> ModuleEnv -> IsMain -> TopLevelModuleName
-  -> [(RtcDefs, CompileOutput)] -> TCM ()
+  -> [(CompiledDef, CompileOutput)] -> TCM ()
 verifyOutput _ _ _ m ls = do
   reportSDoc "agda2hs.compile" 5 $ text "Checking generated output before rendering: " <+> prettyTCM m
   ensureUniqueConstructors
@@ -176,10 +172,9 @@ verifyOutput _ _ _ m ls = do
   where
     ensureUniqueConstructors = do
       let allCons = do
-            -- take from concat'd definitions and runtime checks
-            r <- ls >>= (\(WithRtc d r) -> d : [r]) . fst
+            (r, _) <- ls
             (_, a) <- r
-            Hs.DataDecl _ _ _ _ cons _ <- a
+            Hs.DataDecl _ _ _ _ cons _ <- unrtc <$> a
             Hs.QualConDecl _ _ _ con <- cons
             return $ case con of
               Hs.ConDecl _ n _ -> n
@@ -189,7 +184,7 @@ verifyOutput _ _ _ m ls = do
       when (length duplicateCons > 0) $
         agda2hsErrorM $ vcat (map (\x -> text $ "Cannot generate multiple constructors with the same identifier: " <> Hs.prettyPrint (headWithDefault __IMPOSSIBLE__ x)) duplicateCons)
 
-    ensureNoOutputFromHsModules = unless (all (null . getAllRtc . fst) ls) $ do
+    ensureNoOutputFromHsModules = unless (all (null . fst) ls) $ do
       let hsModName = hsTopLevelModuleName m
       case hsModuleKind hsModName of
         HsModule -> do

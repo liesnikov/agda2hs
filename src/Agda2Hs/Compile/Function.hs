@@ -7,6 +7,7 @@ import Control.Monad.Reader ( asks, local )
 import Data.Generics
 import Data.List
 import Data.Maybe ( fromMaybe, isJust )
+import Data.Functor (($>))
 import qualified Data.Text as Text
 
 import Agda.Compiler.Backend
@@ -97,7 +98,7 @@ compileLitNatPat = \case
 
 compileFun, compileFun'
   :: Bool -- ^ Whether the type signature shuuld also be generated
-  -> Definition -> C RtcDecls
+  -> Definition -> C [WDecl]
 
 compileFun withSig def@Defn{..} =
   setCurrentRangeQ defName
@@ -117,7 +118,7 @@ compileFun' withSig def@Defn{..} = inTopContext $ withCurrentModule m $ do
 
   ifM (endsInSort defType)
     -- if the function type ends in Sort, it's a type alias!
-    ((`WithRtc` []) <$> (ensureNoLocals err >> compileTypeDef x def))
+    (map mkOut <$> (ensureNoLocals err >> compileTypeDef x def))
     -- otherwise, we have to compile clauses.
     $ do
     tel <- lookupSection m
@@ -162,14 +163,17 @@ compileFun' withSig def@Defn{..} = inTopContext $ withCurrentModule m $ do
         <+> text "Use function `error` from the Haskell.Prelude instead."
 
       let def = sig ++ [Hs.FunBind () cs]
+      irtc <- checkEmitsRtc defName
+      let mdef = map (if irtc then mkIRtc else mkOut) def
       chk <- ifNotM (checkEmitsRtc defName) (return []) $ do
         let typeTel = theTel $ telView' defType
             success = Hs.hsVar $ prettyShow m ++ ".PostRtc." ++ prettyShow n
-        checkRtc typeTel defName success alternatingLevels >>= \case
-          NoneErased -> do tellNoErased $ prettyShow n; return []
+        check <- checkRtc typeTel defName success alternatingLevels
+        case check of
+          NoneErased -> tellNoErased (prettyShow n) $> []
           Uncheckable -> return []
-          Checkable ds -> return $ sig ++ ds
-      return $ WithRtc def chk
+          Checkable ds -> return $ mkERtc <$> sig ++ ds
+      return $ mdef ++ chk
   where
     Function{..} = theDef
     m = qnameModule defName
@@ -244,7 +248,7 @@ compileClause' curModule projName x ty c@Clause{..} = do
 
     let rhs = Hs.UnGuardedRhs () hsBody
         whereBinds | null whereDecls = Nothing
-                   | otherwise       = Just $ Hs.BDecls () (concatMap defn whereDecls)
+                   | otherwise       = Just $ Hs.BDecls () (concatMap (fmap unrtc) whereDecls)
         match = case (x, ps) of
           (Hs.Symbol{}, p : q : ps) -> Hs.InfixMatch () p x (q : ps) rhs whereBinds
           _                         -> Hs.Match () x ps rhs whereBinds
@@ -386,7 +390,7 @@ checkTransparentPragma def = do
   whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased tele alternatingLevels]) $ genericDocError =<<
         "Cannot make function" <+> prettyTCM (defName def) <+> "transparent." <+>
         "Transparent functions cannot have erased arguments with runtime checking."
-  compiledFun <- defn <$> compileFun False def
+  compiledFun <- map unrtc <$> compileFun False def
   case compiledFun of
     [Hs.FunBind _ cls] ->
       mapM_ checkTransparentClause cls
@@ -468,8 +472,8 @@ checkCompileToFunctionPragma def s = noCheckNames $ do
   -- Check that clauses match
   reportSDoc "agda2hs.compileto" 20 $ "Checking that clauses of" <+> ppd <+> "matches those of" <+> ppr
   -- FIXME: this probably isn't right wrt rtc
-  [Hs.FunBind _ dcls] <- defn <$> compileFun False def
-  [Hs.FunBind _ rcls] <- defn <$> compileFun False rdef
+  [Hs.FunBind _ dcls] <- map unrtc <$> compileFun False def
+  [Hs.FunBind _ rcls] <- map unrtc <$> compileFun False rdef
   unless (length dcls == length rcls) $ fail $
     "they have a different number of clauses"
   forM_ (zip dcls rcls) $ \(dcl , rcl) -> do

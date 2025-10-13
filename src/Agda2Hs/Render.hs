@@ -6,7 +6,7 @@ import Control.Monad ( when, unless )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 
 import Data.Function ( on )
-import Data.List ( intercalate, sortBy, nub, unzip5 )
+import Data.List ( intercalate, sortBy, nub, unzip5, partition )
 import Data.Maybe ( fromMaybe, isNothing )
 import Data.Set ( Set )
 import qualified Data.Set as Set
@@ -92,15 +92,20 @@ compileImportsWithPrelude opts mod imps = do
 
 -- | Render the @.hs@ module as a 'String' and write it to a file.
 writeModule :: GlobalEnv -> ModuleEnv -> IsMain -> TopLevelModuleName
-            -> [(RtcDefs, CompileOutput)] -> TCM ModuleRes
+            -> [(CompiledDef, CompileOutput)] -> TCM ModuleRes
 writeModule genv _ isMain m outs = do
   let opts = globalOptions genv
   code <- getForeignPragmas (optExtensions opts)
   let mod = prettyShow m
       (cdefs, impss, extss, sfs, chkds) = unzip5 $ flip map outs $
           \(cdef, CompileOutput imps exts ne achk ) -> (cdef, imps, exts, ne, achk)
-      defs = concatMap (defBlock . defn ) cdefs ++ codeBlocks code
-      chkdefs = concatMap (defBlock . rtcDefn ) cdefs
+      partRanged :: Ranged [WDecl] -> (Ranged [WDecl], Ranged [WDecl])
+      partRanged a@(r, l) =
+        let (e, i) = partition ((ExposedRtc ==) . isrtc) l
+        in ((r, e), (r, i))
+      (edefs, idefs) = unzip $ map (unzip . map partRanged) cdefs
+      defs = concatMap (defBlock . map (fmap $ map unrtc)) idefs ++ codeBlocks code
+      chkdefs = concatMap (defBlock . map (fmap $ map unrtc)) edefs
       imps = concat impss
       exts = concat extss
       safe = concat sfs

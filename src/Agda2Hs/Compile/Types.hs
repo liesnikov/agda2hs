@@ -33,25 +33,29 @@ data GlobalEnv = GlobalEnv
 
 type ModuleEnv   = TopLevelModuleName
 type ModuleRes   = ()
-type CompiledDef = [Ranged [Hs.Decl ()]]
+type CompiledDef = [Ranged [WDecl]]
 type Ranged a    = (Range, a)
 
 type Code = (Hs.Module Hs.SrcSpanInfo, [Hs.Comment])
 
-data WithRtc d = WithRtc
-  { defn :: d,
-    -- Runtime check
-    rtcDefn :: d
+data IsRtc = Regular | ExposedRtc | InternalRtc
+  deriving (Eq, Show)
+
+data WithRtc' d = WithRtc'
+  { unrtc :: d,
+    isrtc  :: IsRtc
   }
 
-instance Functor WithRtc where
-  fmap f (WithRtc d r) = WithRtc (f d) (f r)
+instance Functor WithRtc' where
+  fmap f w@(WithRtc' d _) = w { unrtc = f d }
 
-getAllRtc :: Monoid d => WithRtc d -> d
-getAllRtc (WithRtc d r) = d <> r
+mkOut, mkIRtc, mkERtc :: a -> WithRtc' a
 
-type RtcDefs = WithRtc CompiledDef
-type RtcDecls = WithRtc [Hs.Decl ()]
+mkOut a = WithRtc' a Regular
+mkIRtc a = WithRtc' a InternalRtc
+mkERtc a = WithRtc' a ExposedRtc
+
+type WDecl = WithRtc' (Hs.Decl ())
 
 -- | Custom substitution for a given definition.
 data Rewrite = Rewrite
