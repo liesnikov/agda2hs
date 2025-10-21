@@ -1,0 +1,2 @@
+test/Fail/RuntimeCheckSc.agda:6.6-9: error: [GenericDocError]
+Illegal name scConflict, conflicts with name generated for runtime checks.

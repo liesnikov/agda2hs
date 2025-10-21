@@ -33,7 +33,8 @@ import Agda.TypeChecking.Warnings ( warning )
 
 import qualified Agda.Utils.List1 as List1
 import Agda.Utils.Maybe ( isJust, isNothing, whenJust, fromMaybe, caseMaybeM )
-import Agda.Utils.Monad ( orM, whenM )
+
+import Agda.Utils.Monad ( orM, ifNotM, whenM )
 
 import Agda2Hs.AgdaUtils
 import Agda2Hs.Compile.Types
@@ -125,12 +126,15 @@ compileQName f
       typeError $ CustomBackendError "agda2hs" $ P.text $
         "Symbol " ++ Hs.prettyPrint hf ++ " is missing a COMPILE pragma or rewrite rule"
 
+    modRtc <- ifNotM (emitsRtc f) (return mod) $ case mod of
+      Hs.ModuleName () s -> do
+        return $ Hs.ModuleName () $ s ++ ".PostRtc"
     currMod <- asks $ hsTopLevelModuleName . currModule
     let skipModule = mod == currMod
                   || isJust mimpBuiltin
                   || prettyShow mod0 `elem` primMonadModules
     qual <- if skipModule then return Unqualified
-              else getQualifier (fromMaybe f parent) mod
+              else getQualifier (fromMaybe f parent) modRtc
     -- we only calculate this when dealing with type operators; usually that's where 'type' prefixes are needed in imports
     namespace <- case hf of
           Hs.Symbol _ _ -> getNamespace f
@@ -140,7 +144,7 @@ compileQName f
       -- unqualified prim modules (Prelude)
       mimp = if mkind == PrimModule && not (isQualified qual)
              then Nothing
-             else Just (Import mod qual par hf namespace)
+             else Just (Import modRtc qual par hf namespace)
       qf = qualify mod hf qual
 
     -- add (possibly qualified) import
@@ -153,7 +157,7 @@ compileQName f
       ++ "\nhaskell name: " ++ Hs.prettyPrint hf
       ++ "\nparent name: " ++ prettyShow parent
       ++ "\nmod0: " ++ prettyShow mod0
-      ++ "\nmodule name: " ++ Hs.prettyPrint mod
+      ++ "\nmodule name: " ++ Hs.prettyPrint modRtc
       ++ "\ncurrent module: " ++ Hs.prettyPrint currMod
       ++ "\nqualifier: " ++ prettyShow (fmap (fmap pp) qual)
       ++ "\n(qualified) haskell name: " ++ pp qf
@@ -168,17 +172,22 @@ compileQName f
       _ -> Nothing
 
     getQualifier :: QName -> Hs.ModuleName () -> C Qualifier
-    getQualifier f mod =
-      (inverseScopeLookupName f <$> getScope) >>= \case
+    getQualifier f mod = do
+      cnames <- inverseScopeLookupName f <$> getScope
+      case cnames of
         (C.QName{} : _) -> return Unqualified
-        (C.Qual as C.QName{} : _) -> liftTCM $ do
-          let qual = hsModuleName $ prettyShow as
-          lookupModuleInCurrentModule as >>= \case
-            (x:_) | qual /= mod -> do
-              isDataMod <- isJust <$> isDatatypeModule (amodName x)
-              return $ QualifiedAs (if isDataMod then Nothing else Just qual)
-            _ -> return $ QualifiedAs Nothing
-          `catchError` \_ -> return $ QualifiedAs Nothing
+        (C.Qual mname C.QName{} : _) -> flip catchError
+           (const . return $ QualifiedAs Nothing) $
+           liftTCM $ do
+             let qual = hsModuleName $ prettyShow mname
+             -- in case of error return empty to fall to QualifiedAs Nothing case below
+             amnames <- lookupModuleInCurrentModule mname `catchError` (\_ -> return [])
+             case amnames of
+               (amname:_) | qual /= mod -> do
+                 isDataMod <- isJust <$> isDatatypeModule (amodName amname)
+                 return $ QualifiedAs (if isDataMod then Nothing else Just qual)
+               _ -> return $ QualifiedAs Nothing
+
         _ -> return $ QualifiedAs Nothing
 
     qualify :: Hs.ModuleName () -> Hs.Name () -> Qualifier -> Hs.QName ()
