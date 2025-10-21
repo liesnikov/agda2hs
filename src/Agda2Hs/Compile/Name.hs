@@ -171,17 +171,22 @@ compileQName f = do
       _ -> Nothing
 
     getQualifier :: QName -> Hs.ModuleName () -> C Qualifier
-    getQualifier f mod =
-      (inverseScopeLookupName f <$> getScope) >>= \case
+    getQualifier f mod = do
+      cnames <- inverseScopeLookupName f <$> getScope
+      case cnames of
         (C.QName{} : _) -> return Unqualified
-        (C.Qual as C.QName{} : _) -> liftTCM $ do
-          let qual = hsModuleName $ prettyShow as
-          lookupModuleInCurrentModule as >>= \case
-            (x:_) | qual /= mod -> do
-              isDataMod <- isJust <$> isDatatypeModule (amodName x)
-              return $ QualifiedAs (if isDataMod then Nothing else Just qual)
-            _ -> return $ QualifiedAs Nothing
-          `catchError` \_ -> return $ QualifiedAs Nothing
+        (C.Qual mname C.QName{} : _) -> flip catchError
+           (const . return $ QualifiedAs Nothing) $
+           liftTCM $ do
+             let qual = hsModuleName $ prettyShow mname
+             -- in case of error return empty to fall to QualifiedAs Nothing case below
+             amnames <- lookupModuleInCurrentModule mname `catchError` (\_ -> return [])
+             case amnames of
+               (amname:_) | qual /= mod -> do
+                 isDataMod <- isJust <$> isDatatypeModule (amodName amname)
+                 return $ QualifiedAs (if isDataMod then Nothing else Just qual)
+               _ -> return $ QualifiedAs Nothing
+
         _ -> return $ QualifiedAs Nothing
 
     qualify :: Hs.ModuleName () -> Hs.Name () -> Qualifier -> Hs.QName ()
