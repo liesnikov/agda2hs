@@ -118,15 +118,17 @@ writeModule genv _ isMain m outs = do
     autoImports <- unlines' . map Hs.prettyShowImportDecl
       <$> compileImportsWithPrelude opts mod imps
 
-    let preOpts@PreludeOpts{..} = optPrelude opts
-        nameParts = rawModuleNameParts $ rawTopLevelModuleName m
+    let nameParts = rawModuleNameParts $ rawTopLevelModuleName m
         rtc = isRtcEnabled (optRtc opts) && List1.head nameParts `notElem` ["Agda", "Haskell"]
+
+    when rtc $
+      when ("PostRtc" `elem` List1.toList nameParts) $ agda2hsErrorM $
+        ("Illegal module name" <+> prettyTCM m) <>
+        ", conflicts with name generated for runtime checks."
 
     -- The comments make it hard to generate and pretty print a full module
     hsFile <- moduleFileName opts m
-    when (rtc && "PostRtc" `elem` List1.toList nameParts) $
-      agda2hsErrorM $ ("Illegal module name" <+> prettyTCM m)
-                   <> ", conflicts with name generated for runtime checks."
+
     let postFile = joinPath [takeDirectory hsFile, takeBaseName hsFile, "PostRtc.hs"]
         renderedExps = intercalate ", " $ safe ++ chkd
 
