@@ -97,7 +97,7 @@ compileLitNatPat = \case
 
 
 compileFun, compileFun'
-  :: Bool -- ^ Whether the type signature shuuld also be generated
+  :: Bool -- ^ Whether the type signature should also be generated
   -> Definition -> C [WDecl]
 
 compileFun withSig def@Defn{..} =
