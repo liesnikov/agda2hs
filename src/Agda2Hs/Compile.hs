@@ -44,8 +44,8 @@ globalSetup opts = do
   ctMap <- liftIO $ newIORef M.empty
   return $ GlobalEnv opts ctMap
 
-initCompileEnv :: GlobalEnv -> TopLevelModuleName -> Bool -> SpecialRules -> CompileEnv
-initCompileEnv genv tlm rtc rewrites = CompileEnv
+initCompileEnv :: GlobalEnv -> TopLevelModuleName -> SpecialRules -> CompileEnv
+initCompileEnv genv tlm rewrites = CompileEnv
   { globalEnv         = genv
   , currModule        = tlm
   , minRecordName     = Nothing
@@ -54,7 +54,6 @@ initCompileEnv genv tlm rtc rewrites = CompileEnv
   , compilingLocal    = False
   , whereModules      = []
   , copatternsEnabled = False
-  , rtc               = rtc
   , rewrites          = rewrites
   , writeImports      = True
   , checkNames        = True
@@ -63,8 +62,8 @@ initCompileEnv genv tlm rtc rewrites = CompileEnv
 initCompileState :: CompileState
 initCompileState = CompileState { lcaseUsed = 0 }
 
-runC :: GlobalEnv -> TopLevelModuleName -> Bool -> SpecialRules -> C a -> TCM (a, CompileOutput)
-runC genv tlm rtc rewrites c = evalRWST c (initCompileEnv genv tlm rtc rewrites) initCompileState
+runC :: GlobalEnv -> TopLevelModuleName -> SpecialRules -> C a -> TCM (a, CompileOutput)
+runC genv tlm rewrites c = evalRWST c (initCompileEnv genv tlm rewrites) initCompileState
 
 moduleSetup :: GlobalEnv -> IsMain -> TopLevelModuleName -> Maybe FilePath -> TCM (Recompile ModuleEnv ModuleRes)
 moduleSetup genv _ m mifile = do
@@ -93,13 +92,12 @@ compile
   -> TCM (CompiledDef, CompileOutput)
 compile genv tlm _ def = do
   withCurrentModule (qnameModule qname)
-    $ runC genv tlm rtc (optRewrites opts)
+    $ runC genv tlm (optRewrites opts)
     $ setCurrentRangeQ qname
     $ compileAndTag <* postCompile -- this is where importDec would be
   where
     opts = globalOptions genv
     qname = defName def
-    rtc = optRtc opts
 
     tag []   = []
     tag code = [(nameBindingSite $ qnameName qname, code)]

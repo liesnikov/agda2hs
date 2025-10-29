@@ -114,8 +114,6 @@ data CompileEnv = CompileEnv
   -- ^ the where-blocks currently in scope. Hack until Agda adds where-prominence
   , copatternsEnabled :: Bool
   -- ^ whether copatterns should be allowed when compiling patterns
-  , rtc :: Bool
-  -- ^ whether runtime checks should be emitted (uncheckable names are wrapped away)
   , rewrites :: SpecialRules
   -- ^ Special compilation rules.
   , writeImports :: Bool
