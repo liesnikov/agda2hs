@@ -24,7 +24,7 @@ import Agda.Utils.Monad ( andM, ifNotM, whenM )
 
 import Agda2Hs.AgdaUtils
 import Agda2Hs.Compile.ClassInstance
-import Agda2Hs.Compile.Function ( compileFun )
+import Agda2Hs.Compile.Function ( compileFunNW )
 import Agda2Hs.Compile.RuntimeCheckUtils
 import Agda2Hs.Compile.Type ( compileDomType, compileTeleBinds, compileDom, DomOutput(..) )
 import Agda2Hs.Compile.Types
@@ -53,8 +53,9 @@ compileMinRecord fieldNames m = withMinRecord m $ do
   -- We can't simply compileFun here for two reasons:
   -- * it has an explicit dictionary argument
   -- * it's using the fields and definitions from the minimal record and not the parent record
+  -- * the output is wrapped in RTC
   compiled <- addContext (defaultDom rtype) $ compileLocal $
-    concatMap (fmap unrtc) <$> traverse (compileFun False) defaults
+    concat <$> traverse (compileFunNW False) defaults
   let declMap = Map.fromList [ (definedName c, def) | def@(Hs.FunBind _ (c : _)) <- compiled ]
   reportSDoc "agda2hs.record.min" 20 $
     text "Done compiling minimal record" <+> pretty m <+>

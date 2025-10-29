@@ -100,6 +100,14 @@ compileFun, compileFun'
   :: Bool -- ^ Whether the type signature should also be generated
   -> Definition -> C [WDecl]
 
+-- "compileFun No Wrappers"
+-- strips all RTC wrappers from compileFun output
+compileFunNW, compileFunNW'
+  :: Bool -- ^ Whether the type signature shuuld also be generated
+  -> Definition -> C [Hs.Decl ()]
+compileFunNW  b d = map unrtc <$> compileFun b d
+compileFunNW' b d = map unrtc <$> compileFun' b d
+
 compileFun withSig def@Defn{..} =
   setCurrentRangeQ defName
     $ maybePrependFixity defName (defName ^. lensFixity)
@@ -239,7 +247,7 @@ compileClause' curModule projName x ty c@Clause{..} = do
     let withWhereModule = case children of
           []    -> id
           (c:_) -> addWhereModule $ qnameModule c
-    whereDecls <- withWhereModule $ compileLocal $ mapM (getConstInfo >=> compileFun' True) children
+    whereDecls <- withWhereModule $ compileLocal $ mapM (getConstInfo >=> compileFunNW' True) children
 
     let Just body            = clauseBody
         Just (unArg -> typ)  = clauseType
@@ -248,7 +256,7 @@ compileClause' curModule projName x ty c@Clause{..} = do
 
     let rhs = Hs.UnGuardedRhs () hsBody
         whereBinds | null whereDecls = Nothing
-                   | otherwise       = Just $ Hs.BDecls () (concatMap (fmap unrtc) whereDecls)
+                   | otherwise       = Just $ Hs.BDecls () $ concat whereDecls
         match = case (x, ps) of
           (Hs.Symbol{}, p : q : ps) -> Hs.InfixMatch () p x (q : ps) rhs whereBinds
           _                         -> Hs.Match () x ps rhs whereBinds
@@ -390,7 +398,7 @@ checkTransparentPragma def = do
   whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased tele alternatingLevels]) $ genericDocError =<<
         "Cannot make function" <+> prettyTCM (defName def) <+> "transparent." <+>
         "Transparent functions cannot have erased arguments with runtime checking."
-  compiledFun <- map unrtc <$> compileFun False def
+  compiledFun <- compileFunNW False def
   case compiledFun of
     [Hs.FunBind _ cls] ->
       mapM_ checkTransparentClause cls
@@ -472,8 +480,8 @@ checkCompileToFunctionPragma def s = noCheckNames $ do
   -- Check that clauses match
   reportSDoc "agda2hs.compileto" 20 $ "Checking that clauses of" <+> ppd <+> "matches those of" <+> ppr
   -- FIXME: this probably isn't right wrt rtc
-  [Hs.FunBind _ dcls] <- map unrtc <$> compileFun False def
-  [Hs.FunBind _ rcls] <- map unrtc <$> compileFun False rdef
+  [Hs.FunBind _ dcls] <- compileFunNW False def
+  [Hs.FunBind _ rcls] <- compileFunNW False rdef
   unless (length dcls == length rcls) $ fail $
     "they have a different number of clauses"
   forM_ (zip dcls rcls) $ \(dcl , rcl) -> do
