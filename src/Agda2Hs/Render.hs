@@ -28,7 +28,7 @@ import qualified Agda.Utils.List1 as List1
 import Agda2Hs.Compile
 import Agda2Hs.Compile.Types
 import Agda2Hs.Compile.Imports
-import Agda2Hs.Compile.Utils ( primModules, moduleFileName )
+import Agda2Hs.Compile.Utils ( primModules, moduleFileName, agda2hsErrorM )
 import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils
   ( extToName, pp, moveToTop, insertParens )
@@ -124,9 +124,9 @@ writeModule genv _ isMain m outs = do
 
     -- The comments make it hard to generate and pretty print a full module
     hsFile <- moduleFileName opts m
-    when (rtc && "PostRtc" `elem` List1.toList nameParts) $ do
-      genericDocError =<< ("Illegal module name" <+> prettyTCM m)
-        <> ", conflicts with name generated for runtime checks."
+    when (rtc && "PostRtc" `elem` List1.toList nameParts) $
+      agda2hsErrorM $ ("Illegal module name" <+> prettyTCM m)
+                   <> ", conflicts with name generated for runtime checks."
     let postFile = joinPath [takeDirectory hsFile, takeBaseName hsFile, "PostRtc.hs"]
         renderedExps = intercalate ", " $ safe ++ chkd
 

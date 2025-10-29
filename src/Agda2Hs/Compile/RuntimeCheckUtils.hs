@@ -144,8 +144,8 @@ errorWhenConflicts (c : _) = errorNameConflict c
 
 errorNameConflict :: String -> C ()
 errorNameConflict s =
-  genericDocError
-    =<< ("Illegal name" <+> prettyTCM s) <> ", conflicts with name generated for runtime checks."
+  agda2hsErrorM $ ("Illegal name" <+> prettyTCM s)
+               <> ", conflicts with name generated for runtime checks."
 
 -- Create runtime check.
 -- Takes function name, lhs patterns, expressions for checks, expression on success,

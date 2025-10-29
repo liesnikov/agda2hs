@@ -1,2 +1,3 @@
-test/Fail/RuntimeCheckClass.agda:12.8-15: error: [GenericDocError]
-Cannot compile NoClass to class. Classes cannot have erased arguments with runtime checking.
+test/Fail/RuntimeCheckClass.agda:12.8-15: error: [CustomBackendError]
+agda2hs:
+  Cannot compile NoClass to class. Classes cannot have erased arguments with runtime checking.

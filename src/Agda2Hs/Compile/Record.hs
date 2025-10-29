@@ -109,7 +109,7 @@ compileRecord target def = do
     let fieldTel = snd $ splitTelescopeAt recPars recTel
     case target of
       ToClass ms -> do
-        whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ genericDocError =<<
+        whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ agda2hsErrorM $
              "Cannot compile" <+> prettyTCM (defName def) <+> "to class." <+>
              "Classes cannot have erased arguments with runtime checking."
         when (length binds > 1) $ tellExtension Hs.MultiParamTypeClasses
@@ -220,7 +220,7 @@ checkUnboxPragma def = do
   addContext tel $ do
     pars <- getContextArgs
     let fieldTel = recTel `apply` pars
-    whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ genericDocError =<<
+    whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ agda2hsErrorM $
           "Cannot make record" <+> prettyTCM (defName def) <+> "unboxed." <+>
           "Unboxed records cannot have erased arguments in their fields with runtime checking."
     fields <- nonErasedFields fieldTel
@@ -244,6 +244,6 @@ checkTuplePragma def = do
   addContext tel $ do
     pars <- getContextArgs
     let fieldTel = recTel `apply` pars
-    whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ genericDocError =<<
+    whenM (andM [checkEmitsRtc $ defName def, not <$> checkNoneErased fieldTel recordLevels]) $ agda2hsErrorM $
           "Cannot compile record" <+> prettyTCM (defName def) <+> "as tuple." <+>
           "Tuple records cannot have erased arguments in their fields with runtime checking."
