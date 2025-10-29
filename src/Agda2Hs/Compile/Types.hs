@@ -79,13 +79,19 @@ data PreludeOptions = PreludeOpts
   }
   -- ^ whether Prelude functions should be implicitly imported; if yes, then NamesToImport is a "hiding" list
 
+data RtcOption = RtcEnabled | RtcDisabled
+  deriving (Eq, Show)
+
+isRtcEnabled :: RtcOption -> Bool
+isRtcEnabled RtcEnabled  = True
+isRtcEnabled RtcDisabled = False
 
 data Options = Options
   { optIsEnabled  :: Bool
   , optOutDir     :: Maybe FilePath
   , optConfigFile :: Maybe FilePath
   , optExtensions :: [Hs.Extension]
-  , optRtc        :: Bool
+  , optRtc        :: RtcOption
   , optRewrites   :: SpecialRules
   , optPrelude    :: PreludeOptions
   }

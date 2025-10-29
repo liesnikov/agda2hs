@@ -30,7 +30,7 @@ defaultOptions = Options
   , optOutDir     = Nothing
   , optConfigFile = Nothing
   , optExtensions = []
-  , optRtc        = False
+  , optRtc        = RtcDisabled
   , optPrelude    = PreludeOpts False Nothing []
     -- by default the Prelude is imported explicitly
   , optRewrites   = defaultSpecialRules
@@ -50,7 +50,7 @@ extensionOpt :: String -> Flag Options
 extensionOpt ext opts = return opts { optExtensions = Hs.parseExtension ext : optExtensions opts }
 
 rtcOpt :: Flag Options
-rtcOpt opts = return opts { optRtc = True }
+rtcOpt opts = return opts { optRtc = RtcEnabled }
 
 backend :: Backend' Options GlobalEnv ModuleEnv ModuleRes (CompiledDef, CompileOutput)
 backend = Backend'

@@ -120,7 +120,7 @@ writeModule genv _ isMain m outs = do
 
     let preOpts@PreludeOpts{..} = optPrelude opts
         nameParts = rawModuleNameParts $ rawTopLevelModuleName m
-        rtc = optRtc opts && List1.head nameParts `notElem` ["Agda", "Haskell"]
+        rtc = isRtcEnabled (optRtc opts) && List1.head nameParts `notElem` ["Agda", "Haskell"]
 
     -- The comments make it hard to generate and pretty print a full module
     hsFile <- moduleFileName opts m

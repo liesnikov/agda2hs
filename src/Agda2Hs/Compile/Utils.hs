@@ -405,8 +405,8 @@ checkNoAsPatterns = \case
 checkEmitsRtc :: QName -> C Bool
 checkEmitsRtc qname = do
   topName <- prettyTCM $ List1.head $ mnameToList1 $ qnameModule qname
-  rtcEnabled <- asks $ optRtc . globalOptions . globalEnv
-  return $ rtcEnabled && show topName /= "Haskell"
+  rtcStatus <- asks $ optRtc . globalOptions . globalEnv
+  return $ isRtcEnabled rtcStatus && show topName /= "Haskell"
 
 -- Uniform compilation output
 
