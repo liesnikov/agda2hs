@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc) where
 
 import Agda.Syntax.Common

@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Agda2Hs.Render where
 
 import Control.Monad ( when, unless )
