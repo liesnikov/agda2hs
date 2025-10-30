@@ -164,10 +164,10 @@ data CompileOutput = CompileOutput
   -- ^ Haskell import statements.
   , haskellExtensions :: [Hs.KnownExtension]
   -- ^ Required language extensions.
-  , noErased :: [(QName, [QName])]
+  , noErased :: [(Hs.Name (), [Hs.Name ()])]
   -- ^ Names of datatypes and their constructors or functions and empty list or record and their fields
   -- | that that can be exposed as is  wrt runtime checks because they have no erased arguments
-  , allCheckable :: [QName]
+  , allCheckable :: [Hs.Name ()]
   -- ^ Names that can be exposed wrt runtime checks because all erased arguments are checkable
   }
 

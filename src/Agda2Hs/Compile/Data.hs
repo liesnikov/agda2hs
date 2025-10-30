@@ -29,11 +29,11 @@ import Agda2Hs.Pragma
 
 data DataRtcResult
   = NoRtc
-  | DataNoneErased QName
+  | DataNoneErased (Hs.Name ())
   | DataUncheckable
   | DataCheckable [Hs.Decl ()]
 
-concatRtc :: [DataRtcResult] -> ([QName], [Hs.Decl ()])
+concatRtc :: [DataRtcResult] -> ([Hs.Name ()], [Hs.Decl ()])
 concatRtc [] = ([], [])
 concatRtc (res : ress) = case res of
   DataNoneErased s -> (s : tlNoneErased, tlCheckable)
@@ -66,7 +66,7 @@ compileData newtyp ds def = do
     chks <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
       let (noneErased, chks) = concatRtc $ map snd chkdCs
       -- Always export data type name
-      tellNoErased (defName def) noneErased
+      tellNoErased d noneErased
       return chks
 
     let cs = map fst chkdCs

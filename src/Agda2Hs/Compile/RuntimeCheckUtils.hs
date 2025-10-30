@@ -218,9 +218,9 @@ checkRtc tel name success lvls = do
     NoneErased' -> return NoneErased
     Uncheckable' -> return Uncheckable
     Checkable' {..} -> do
-      tellAllCheckable name
+      let chkName = hsName $ prettyShow $ qnameName name
+      tellAllCheckable chkName
       let rhs = eApp success theirRhs
-          chkName = hsName $ prettyShow $ qnameName name
           maybeWhere = if null theirDecls then Nothing else Just $ Hs.BDecls () theirDecls
           chk = createRtc chkName theirLhs theirChks rhs maybeWhere
       return $ Checkable [chk]

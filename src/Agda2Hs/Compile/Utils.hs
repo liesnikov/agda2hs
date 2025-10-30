@@ -427,10 +427,10 @@ tellImport imp = tell $ CompileOutput [imp] [] [] []
 tellExtension :: Hs.KnownExtension -> C ()
 tellExtension pr = tell $ CompileOutput [] [pr] [] []
 
-tellNoErased :: QName -> [QName] -> C ()
+tellNoErased :: Hs.Name () -> [Hs.Name ()] -> C ()
 tellNoErased d cs = tell $ CompileOutput [] [] [(d, cs)] []
 
-tellAllCheckable :: QName -> C ()
+tellAllCheckable :: Hs.Name () -> C ()
 tellAllCheckable chk = tell $ CompileOutput [] [] [] [chk]
 
 tellUnboxedTuples :: Hs.Boxed -> C ()
