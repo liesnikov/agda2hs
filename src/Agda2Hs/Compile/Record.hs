@@ -203,7 +203,7 @@ compileRecord target def = do
       -> C (Hs.Decl ())
     compileDataRecord constraints fieldDecls don hd ds = do
       unless (null constraints) __IMPOSSIBLE__ -- no constraints for records
-      mapM_ checkFieldInScope (map unDom recFields)
+      mapM_ (checkFieldInScope . unDom) recFields
       let conDecl = Hs.QualConDecl () Nothing Nothing $ Hs.RecDecl () cName fieldDecls
       return $ Hs.DataDecl () don Nothing hd [conDecl] ds
 
