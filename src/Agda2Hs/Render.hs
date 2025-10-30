@@ -27,6 +27,7 @@ import Agda2Hs.Compile
 import Agda2Hs.Compile.Types
 import Agda2Hs.Compile.Imports
 import Agda2Hs.Compile.Utils ( primModules, moduleFileName, agda2hsErrorM )
+import Agda2Hs.Compile.RuntimeCheckUtils ( renderAllExports )
 import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils
   ( extToName, pp, moveToTop, insertParens )
@@ -107,7 +108,7 @@ writeModule genv _ isMain m outs = do
       imps = concat impss
       exts = concat extss
       safe = concat sfs
-      chkd = map prettyShow $ concat chkds
+      chkd = concat chkds
   unless (null code && null defs && isMain == NotMain) $ do
 
     let unlines' [] = []
@@ -128,7 +129,7 @@ writeModule genv _ isMain m outs = do
     hsFile <- moduleFileName opts m
 
     let postFile = joinPath [takeDirectory hsFile, takeBaseName hsFile, "PostRtc.hs"]
-        renderedExps = intercalate ", " $ safe ++ chkd
+        renderedExps = renderAllExports safe chkd
 
     -- "pre" runtime check output (_the_ output if RTC disabled)
     let preOutput = concat

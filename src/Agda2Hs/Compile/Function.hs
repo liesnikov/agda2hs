@@ -178,7 +178,7 @@ compileFun' withSig def@Defn{..} = inTopContext $ withCurrentModule m $ do
             success = Hs.hsVar $ prettyShow m ++ ".PostRtc." ++ prettyShow n
         check <- checkRtc typeTel defName success alternatingLevels
         case check of
-          NoneErased -> tellNoErased (prettyShow n) $> []
+          NoneErased -> tellNoErased defName [] $> []
           Uncheckable -> return []
           Checkable ds -> return $ mkERtc <$> sig ++ ds
       return $ mdef ++ chk

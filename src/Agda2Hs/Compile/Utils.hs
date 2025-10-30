@@ -427,8 +427,8 @@ tellImport imp = tell $ CompileOutput [imp] [] [] []
 tellExtension :: Hs.KnownExtension -> C ()
 tellExtension pr = tell $ CompileOutput [] [pr] [] []
 
-tellNoErased :: String -> C ()
-tellNoErased er = tell $ CompileOutput [] [] [er] []
+tellNoErased :: QName -> [QName] -> C ()
+tellNoErased d cs = tell $ CompileOutput [] [] [(d, cs)] []
 
 tellAllCheckable :: QName -> C ()
 tellAllCheckable chk = tell $ CompileOutput [] [] [] [chk]

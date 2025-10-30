@@ -1,4 +1,4 @@
-module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc) where
+module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc, renderAllExports) where
 
 import Agda.Syntax.Common
 import Agda.Syntax.Common.Pretty (prettyShow)
@@ -28,9 +28,9 @@ import Agda2Hs.Compile.Utils
 import Agda2Hs.Language.Haskell.Utils
 import Control.Monad.Except (catchError)
 import Control.Monad.State (StateT (StateT, runStateT))
-import Data.List (intersect)
 import Data.Map (empty)
 import Data.Maybe (catMaybes, fromJust, isJust)
+import Data.List ( intercalate, intersect )
 import Data.Tree (flatten, unfoldTree)
 import Data.Tuple (swap)
 import qualified Language.Haskell.Exts as Hs
@@ -342,3 +342,14 @@ mapAccumLM :: (Monad m, Traversable t) => (acc -> x -> m (acc, y)) -> acc -> t x
 mapAccumLM f s = fmap swap . flip runStateT s . traverse f'
   where
     f' = StateT . (fmap . fmap) swap . flip f
+
+
+renderNoErased :: (QName, [QName]) -> String
+renderNoErased (dt, cs) = prettyName dt ++ mcsl
+  where
+    prettyName def = prettyShow $ qnameName def
+    mcsl = if null cs then "" else "(" ++ csl  ++ ")"
+    csl = intercalate ", " . map (prettyShow . qnameName) $ cs
+
+renderAllExports :: [(QName, [QName])] -> [QName] -> String
+renderAllExports ne ac = intercalate ", " $ map renderNoErased ne ++ map prettyShow ac

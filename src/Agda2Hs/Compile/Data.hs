@@ -29,11 +29,11 @@ import Agda2Hs.Pragma
 
 data DataRtcResult
   = NoRtc
-  | DataNoneErased String
+  | DataNoneErased QName
   | DataUncheckable
   | DataCheckable [Hs.Decl ()]
 
-concatRtc :: [DataRtcResult] -> ([String], [Hs.Decl ()])
+concatRtc :: [DataRtcResult] -> ([QName], [Hs.Decl ()])
 concatRtc [] = ([], [])
 concatRtc (res : ress) = case res of
   DataNoneErased s -> (s : tlNoneErased, tlCheckable)
@@ -66,7 +66,7 @@ compileData newtyp ds def = do
     chks <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
       let (noneErased, chks) = concatRtc $ map snd chkdCs
       -- Always export data type name
-      tellNoErased $ prettyName ++ "(" ++ intercalate ", " noneErased ++ ")"
+      tellNoErased (defName def) noneErased
       return chks
 
     let cs = map fst chkdCs
@@ -105,7 +105,7 @@ compileConstructor params c = do
     sig <- Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] <$> compileType (unEl ty)
     -- export constructor name when none erased, provide signature for smart constructor if it exists
     checkRtc tel smartQName (Hs.hsVar conString) alternatingLevels >>= \case
-      NoneErased -> return $ DataNoneErased conString
+      NoneErased -> return $ DataNoneErased c
       Uncheckable -> return DataUncheckable
       Checkable ds -> return $ DataCheckable $ sig : ds
 

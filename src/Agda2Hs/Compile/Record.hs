@@ -129,17 +129,17 @@ compileRecord target def = do
         when (theEtaEquality recEtaEquality' == YesEta) $ agda2hsErrorM $
           "Agda records compiled to Haskell should have eta-equality disabled." <+>
           "Add no-eta-equality to the definition of" <+> (text (pp rName) <> ".")
-        (constraints, fieldDecls, fieldStrings, fieldTypes) <- compileRecFields fieldDecl recFields fieldTel
+        (constraints, fieldDecls, fieldQNames, fieldTypes) <- compileRecFields fieldDecl recFields fieldTel
 
         chk <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
           let scType = foldr (Hs.TyFun ()) (Hs.TyVar () $ Hs.Ident () rString) fieldTypes
               sig = Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] scType
           (noneErasedCons, chk) <- checkRtc fieldTel smartQName (Hs.hsVar conString) recordLevels >>= \case
-            NoneErased -> return ([conString], [])
+            NoneErased -> return ([conQName], [])
             Uncheckable -> return ([], [])
             Checkable ds -> return ([], sig : ds)
           -- Always export record name and field names. Export constructor when it has no erased types.
-          tellNoErased $ rString ++ "(" ++ intercalate ", " (fieldStrings ++ noneErasedCons) ++ ")"
+          tellNoErased rQName (fieldQNames ++ noneErasedCons)
           return chk
 
         when newtyp $ checkNewtypeCon cName fieldDecls
@@ -147,10 +147,12 @@ compileRecord target def = do
         drc <- compileDataRecord constraints fieldDecls target hd ds
         return $ mkIRtc drc : map mkERtc chk
   where
-    rString = prettyShow $ qnameName $ defName def
+    rQName = defName def
+    rString = prettyShow $ qnameName rQName
     rName = hsName rString
-    conString | recNamedCon = prettyShow $ qnameName $ conName recConHead
-              | otherwise   = rString   -- Reuse record name for constructor if no given name
+    conQName | recNamedCon = conName recConHead
+             | otherwise   = rQName   -- Reuse record name for constructor if no given name
+    conString = prettyShow . qnameName $ conQName
     cName = hsName conString
 
     -- In Haskell, projections live in the same scope as the record type, so check here that the
@@ -171,26 +173,27 @@ compileRecord target def = do
     fieldDecl n = Hs.FieldDecl () [n]
 
     compileRecFields :: (Hs.Name () -> Hs.Type () -> b)
-                     -> [Dom QName] -> Telescope -> C ([Hs.Asst ()], [b], [String], [Hs.Type ()])
+                     -> [Dom QName] -> Telescope -> C ([Hs.Asst ()], [b], [QName], [Hs.Type ()])
     compileRecFields decl ns tel = case (ns, tel) of
       (_   , EmptyTel          ) -> return ([], [], [], [])
       (n:ns, ExtendTel dom tel') -> do
         hsDom <- withNestedType $ compileDomType (absName tel') dom
-        (hsAssts, hsFields, fieldStrings, hsTypes) <- underAbstraction dom tel' $ compileRecFields decl ns
+        (hsAssts, hsFields, fieldQNames, hsTypes) <- underAbstraction dom tel' $ compileRecFields decl ns
         case hsDom of
           DomType s hsA -> do
-            let fieldString = prettyShow $ qnameName $ unDom n
+            let fieldQName = unDom n
+                fieldString = prettyShow $ qnameName $ fieldQName
                 fieldName = hsName fieldString
             fieldType <- addTyBang s hsA
             checkValidFunName fieldName
-            return (hsAssts, decl fieldName fieldType : hsFields, fieldString : fieldStrings, hsA : hsTypes)
+            return (hsAssts, decl fieldName fieldType : hsFields, fieldQName : fieldQNames, hsA : hsTypes)
           DomConstraint hsA -> case target of
             ToClass{} -> do
               when (isQuantifiedAsst hsA) $ tellExtension Hs.QuantifiedConstraints
-              return (hsA : hsAssts, hsFields, fieldStrings, hsTypes)
+              return (hsA : hsAssts, hsFields, fieldQNames, hsTypes)
             ToRecord{} -> agda2hsError $
               "Not supported: record/class with constraint fields"
-          DomDropped -> return (hsAssts, hsFields, fieldStrings, hsTypes)
+          DomDropped -> return (hsAssts, hsFields, fieldQNames, hsTypes)
           DomForall{} -> __IMPOSSIBLE__
       (_, _) -> __IMPOSSIBLE__
 
