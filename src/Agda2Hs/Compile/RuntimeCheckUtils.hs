@@ -223,7 +223,8 @@ checkRtc tel name success lvls = do
       tellAllCheckable name
       let rhs = eApp success theirRhs
           chkName = hsName $ prettyShow $ qnameName name
-          chk = createRtc chkName theirLhs theirChks rhs $ if null theirDecls then Nothing else Just $ Hs.BDecls () theirDecls
+          maybeWhere = if null theirDecls then Nothing else Just $ Hs.BDecls () theirDecls
+          chk = createRtc chkName theirLhs theirChks rhs maybeWhere
       return $ Checkable [chk]
 
 -- Recursively check for runtime checkability in nested types.
