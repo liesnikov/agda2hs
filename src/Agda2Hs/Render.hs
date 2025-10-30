@@ -30,7 +30,7 @@ import Agda2Hs.Compile.Utils ( primModules, moduleFileName, agda2hsErrorM )
 import Agda2Hs.Compile.RuntimeCheckUtils ( renderAllExports )
 import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils
-  ( extToName, pp, moveToTop, insertParens )
+  ( extToName, pp, ppline, moveToTop, insertParens )
 import Agda2Hs.Pragma ( getForeignPragmas )
 
 -- Rendering --------------------------------------------------------------
@@ -129,11 +129,12 @@ writeModule genv _ isMain m outs = do
     hsFile <- moduleFileName opts m
 
     let postFile = joinPath [takeDirectory hsFile, takeBaseName hsFile, "PostRtc.hs"]
-        renderedExps = renderAllExports safe chkd
+        renderedExps :: Hs.ExportSpecList ()
+        renderedExps = renderAllExports safe chkd mod
 
     -- "pre" runtime check output (_the_ output if RTC disabled)
     let preOutput = concat
-          [ "module " ++ mod ++ " (" ++ renderedExps ++ ") where\n\n"
+          [ "module " ++ mod ++ " " ++ ppline renderedExps ++ " where\n\n"
           , autoImports
           , "import " ++ mod ++ ".PostRtc\n\n"
           , renderBlocks chkdefs

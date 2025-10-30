@@ -343,13 +343,5 @@ mapAccumLM f s = fmap swap . flip runStateT s . traverse f'
   where
     f' = StateT . (fmap . fmap) swap . flip f
 
-
-renderNoErased :: (QName, [QName]) -> String
-renderNoErased (dt, cs) = prettyName dt ++ mcsl
-  where
-    prettyName def = prettyShow $ qnameName def
-    mcsl = if null cs then "" else "(" ++ csl  ++ ")"
-    csl = intercalate ", " . map (prettyShow . qnameName) $ cs
-
-renderAllExports :: [(QName, [QName])] -> [QName] -> String
-renderAllExports ne ac = intercalate ", " $ map renderNoErased ne ++ map prettyShow ac
+renderAllExports :: [Hs.ExportSpec ()] -> [Hs.Name ()] -> String -> Hs.ExportSpecList ()
+renderAllExports ne ac mod = Hs.ExportSpecList () $ ne ++ map (Hs.EVar () . Hs.Qual () (Hs.ModuleName () mod)) ac

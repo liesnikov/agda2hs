@@ -129,17 +129,17 @@ compileRecord target def = do
         when (theEtaEquality recEtaEquality' == YesEta) $ agda2hsErrorM $
           "Agda records compiled to Haskell should have eta-equality disabled." <+>
           "Add no-eta-equality to the definition of" <+> (text (pp rName) <> ".")
-        (constraints, fieldDecls, fieldQNames, fieldTypes) <- compileRecFields fieldDecl recFields fieldTel
+        (constraints, fieldDecls, fieldNames, fieldTypes) <- compileRecFields fieldDecl recFields fieldTel
 
         chk <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
           let scType = foldr (Hs.TyFun ()) (Hs.TyVar () $ Hs.Ident () rString) fieldTypes
               sig = Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] scType
           (noneErasedCons, chk) <- checkRtc fieldTel smartQName (Hs.hsVar conString) recordLevels >>= \case
-            NoneErased -> return ([conQName], [])
+            NoneErased -> return ([cName], [])
             Uncheckable -> return ([], [])
             Checkable ds -> return ([], sig : ds)
           -- Always export record name and field names. Export constructor when it has no erased types.
-          tellNoErased rQName (fieldQNames ++ noneErasedCons)
+          tellNoErasedRec rName noneErasedCons fieldNames
           return chk
 
         when newtyp $ checkNewtypeCon cName fieldDecls
@@ -173,27 +173,25 @@ compileRecord target def = do
     fieldDecl n = Hs.FieldDecl () [n]
 
     compileRecFields :: (Hs.Name () -> Hs.Type () -> b)
-                     -> [Dom QName] -> Telescope -> C ([Hs.Asst ()], [b], [QName], [Hs.Type ()])
+                     -> [Dom QName] -> Telescope -> C ([Hs.Asst ()], [b], [Hs.Name ()], [Hs.Type ()])
     compileRecFields decl ns tel = case (ns, tel) of
       (_   , EmptyTel          ) -> return ([], [], [], [])
       (n:ns, ExtendTel dom tel') -> do
         hsDom <- withNestedType $ compileDomType (absName tel') dom
-        (hsAssts, hsFields, fieldQNames, hsTypes) <- underAbstraction dom tel' $ compileRecFields decl ns
+        (hsAssts, hsFields, fieldNames, hsTypes) <- underAbstraction dom tel' $ compileRecFields decl ns
         case hsDom of
           DomType s hsA -> do
-            let fieldQName = unDom n
-                fieldString = prettyShow $ qnameName $ fieldQName
-                fieldName = hsName fieldString
+            let fieldName = hsName . prettyShow . qnameName $ unDom n
             fieldType <- addTyBang s hsA
             checkValidFunName fieldName
-            return (hsAssts, decl fieldName fieldType : hsFields, fieldQName : fieldQNames, hsA : hsTypes)
+            return (hsAssts, decl fieldName fieldType : hsFields, fieldName : fieldNames, hsA : hsTypes)
           DomConstraint hsA -> case target of
             ToClass{} -> do
               when (isQuantifiedAsst hsA) $ tellExtension Hs.QuantifiedConstraints
-              return (hsA : hsAssts, hsFields, fieldQNames, hsTypes)
+              return (hsA : hsAssts, hsFields, fieldNames, hsTypes)
             ToRecord{} -> agda2hsError $
               "Not supported: record/class with constraint fields"
-          DomDropped -> return (hsAssts, hsFields, fieldQNames, hsTypes)
+          DomDropped -> return (hsAssts, hsFields, fieldNames, hsTypes)
           DomForall{} -> __IMPOSSIBLE__
       (_, _) -> __IMPOSSIBLE__
 

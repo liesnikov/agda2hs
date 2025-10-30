@@ -66,7 +66,7 @@ compileData newtyp ds def = do
     chks <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
       let (noneErased, chks) = concatRtc $ map snd chkdCs
       -- Always export data type name
-      tellNoErased d noneErased
+      tellNoErasedData d noneErased
       return chks
 
     let cs = map fst chkdCs
@@ -105,7 +105,7 @@ compileConstructor params c = do
     sig <- Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] <$> compileType (unEl ty)
     -- export constructor name when none erased, provide signature for smart constructor if it exists
     checkRtc tel smartQName (Hs.hsVar conString) alternatingLevels >>= \case
-      NoneErased -> return $ DataNoneErased c
+      NoneErased -> return $ DataNoneErased conName
       Uncheckable -> return DataUncheckable
       Checkable ds -> return $ DataCheckable $ sig : ds
 

@@ -427,8 +427,20 @@ tellImport imp = tell $ CompileOutput [imp] [] [] []
 tellExtension :: Hs.KnownExtension -> C ()
 tellExtension pr = tell $ CompileOutput [] [pr] [] []
 
-tellNoErased :: Hs.Name () -> [Hs.Name ()] -> C ()
-tellNoErased d cs = tell $ CompileOutput [] [] [(d, cs)] []
+tellNoErased :: Hs.ExportSpec () -> C ()
+tellNoErased e = tell $ CompileOutput [] [] [e] []
+
+tellNoErasedFun :: Hs.Name () -> C ()
+tellNoErasedFun n = tellNoErased $ Hs.EVar () (Hs.UnQual () n)
+
+tellNoErasedData :: Hs.Name () -> [Hs.Name ()] -> C ()
+tellNoErasedData d cs = tellNoErased $ Hs.EThingWith () (Hs.NoWildcard ()) (Hs.UnQual () d) (map (Hs.ConName ()) cs)
+
+tellNoErasedRec :: Hs.Name () -> [Hs.Name ()] -> [Hs.Name ()] -> C ()
+tellNoErasedRec d cs fs = tellNoErased $ Hs.EThingWith () (Hs.NoWildcard ()) (Hs.UnQual () d) (econstr ++ efields)
+  where
+   econstr = map (Hs.ConName ()) cs
+   efields = map (Hs.VarName ()) fs
 
 tellAllCheckable :: Hs.Name () -> C ()
 tellAllCheckable chk = tell $ CompileOutput [] [] [] [chk]
