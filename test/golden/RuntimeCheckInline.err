@@ -1,0 +1,3 @@
+test/Fail/RuntimeCheckInline.agda:10.1-13: error: [CustomBackendError]
+agda2hs:
+  Cannot make function notInlinable inlinable. Inline functions cannot have erased arguments with runtime checking.

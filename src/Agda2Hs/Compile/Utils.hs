@@ -46,12 +46,14 @@ import Agda.TypeChecking.Substitute ( Subst, TelV(TelV), Apply(..) )
 import Agda.TypeChecking.Telescope ( telView )
 
 import Agda.Utils.Lens ( (<&>) )
+import qualified Agda.Utils.List1 as List1
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
 import Agda.Utils.Singleton
+import Agda.Utils.Tuple ( (-*-) )
 
 import AgdaInternals
-import Agda2Hs.AgdaUtils ( (~~), resolveStringName )
+import Agda2Hs.AgdaUtils ( (~~), testResolveStringName, resolveStringName )
 import Agda2Hs.Compile.Types
 import Agda2Hs.Pragma
 import qualified Data.List as L
@@ -315,8 +317,8 @@ withNestedType = local $ \e -> e { isNestedInType = True }
 compileLocal :: C a -> C a
 compileLocal = local $ \e -> e { compilingLocal = True }
 
-addWhereModule :: ModuleName  -> C a -> C a
-addWhereModule mName = local $ \e -> e { whereModules = mName : whereModules e }
+noWriteImports :: C a -> C a
+noWriteImports = local $ \e -> e { writeImports = False }
 
 modifyLCase :: (Int -> Int) -> CompileState -> CompileState
 modifyLCase f (CompileState {lcaseUsed = n}) = CompileState {lcaseUsed = f n}
@@ -334,6 +336,14 @@ ensureNoLocals msg = unlessM (null <$> asks locals) $ agda2hsStringError msg
 
 withLocals :: LocalDecls -> C a -> C a
 withLocals ls = local $ \e -> e { locals = ls }
+
+-- wrappers for compilation output checks
+
+noCheckNames :: C a -> C a
+noCheckNames = local $ \e -> e { checkNames = False }
+
+doNameCheck :: C Bool
+doNameCheck = reader checkNames
 
 checkValidVarName :: Hs.Name () -> C ()
 checkValidVarName x = whenM doNameCheck $ unless (validVarName x) $ agda2hsErrorM $ do
@@ -355,26 +365,6 @@ checkValidConName :: Hs.Name () -> C ()
 checkValidConName x = whenM doNameCheck $ unless (validConName x) $ agda2hsErrorM $ do
   text "Invalid name for Haskell constructor: " <+> text (Hs.prettyPrint x)
 
-tellImport :: Import -> C ()
-tellImport imp = tell $ CompileOutput [imp] []
-
-tellExtension :: Hs.KnownExtension -> C ()
-tellExtension pr = tell $ CompileOutput [] [pr]
-
-tellUnboxedTuples :: Hs.Boxed -> C ()
-tellUnboxedTuples Hs.Boxed = return ()
-tellUnboxedTuples Hs.Unboxed = tellExtension $ Hs.UnboxedTuples
-
-addPatBang :: Strictness -> Hs.Pat () -> C (Hs.Pat ())
-addPatBang Strict p = tellExtension Hs.BangPatterns >>
-  return (Hs.PBangPat () p)
-addPatBang Lazy   p = return p
-
-addTyBang :: Strictness -> Hs.Type () -> C (Hs.Type ())
-addTyBang Strict ty = tellExtension Hs.BangPatterns >>
-  return (Hs.TyBang () (Hs.BangedTy ()) (Hs.NoUnpackPragma ()) ty)
-addTyBang Lazy   ty = return ty
-
 checkSingleElement :: Hs.Name () -> [b] -> String -> C ()
 checkSingleElement name fs s = unless (length fs == 1) $ agda2hsErrorM $ do
   text (s ++ ":") <+> text (Hs.prettyPrint name)
@@ -390,18 +380,6 @@ checkFixityLevel name (Related lvl) =
     then agda2hsErrorM $ text "Invalid fixity" <+> pretty lvl
                      <+> text "for operator"   <+> prettyTCM name
     else pure (Just (round lvl))
-
-maybePrependFixity :: QName -> Fixity -> C [Hs.Decl ()] -> C [Hs.Decl ()]
-maybePrependFixity n f comp | f /= noFixity = do
-  hsLvl <- checkFixityLevel n (fixityLevel f)
-  let x = hsName $ prettyShow $ qnameName n
-  let hsAssoc = case fixityAssoc f of
-        NonAssoc   -> Hs.AssocNone ()
-        LeftAssoc  -> Hs.AssocLeft ()
-        RightAssoc -> Hs.AssocRight ()
-  (Hs.InfixDecl () hsAssoc hsLvl [Hs.VarOp () x]:) <$> comp
-maybePrependFixity n f comp = comp
-
 
 checkNoAsPatterns :: DeBruijnPattern -> C ()
 checkNoAsPatterns = \case
@@ -421,11 +399,79 @@ checkNoAsPatterns = \case
     checkPatternInfo i = unless (null $ patAsNames i) $
       agda2hsError "not supported: as patterns"
 
-noWriteImports :: C a -> C a
-noWriteImports = local $ \e -> e { writeImports = False }
+-- Check if runtime checks should be emitted, i.e. the feature is
+-- enabled and the name is not in the trusted computing base.
+-- This is not included in RuntimeCheckUtils.hs for dependency reasons.
+checkEmitsRtc :: QName -> C Bool
+checkEmitsRtc qname = do
+  topName <- prettyTCM $ List1.head $ mnameToList1 $ qnameModule qname
+  rtcStatus <- asks $ optRtc . globalOptions . globalEnv
+  return $ isRtcEnabled rtcStatus && show topName /= "Haskell"
 
-noCheckNames :: C a -> C a
-noCheckNames = local $ \e -> e { checkNames = False }
+-- Uniform compilation output
 
-doNameCheck :: C Bool
-doNameCheck = reader checkNames
+cnil :: C [a]
+cnil = pure []
+
+cone :: C a -> C [a]
+cone a = pure <$> a
+
+cpure :: a -> C [a]
+cpure = cone . pure
+
+-- Add a non-declaration compiled output
+
+tellImport :: Import -> C ()
+tellImport imp = tell $ CompileOutput [imp] [] [] []
+
+tellExtension :: Hs.KnownExtension -> C ()
+tellExtension pr = tell $ CompileOutput [] [pr] [] []
+
+tellNoErased :: Hs.ExportSpec () -> C ()
+tellNoErased e = tell $ CompileOutput [] [] [e] []
+
+tellNoErasedFun :: Hs.Name () -> C ()
+tellNoErasedFun n = tellNoErased $ Hs.EVar () (Hs.UnQual () n)
+
+tellNoErasedData :: Hs.Name () -> [Hs.Name ()] -> C ()
+tellNoErasedData d cs = tellNoErased $ Hs.EThingWith () (Hs.NoWildcard ()) (Hs.UnQual () d) (map (Hs.ConName ()) cs)
+
+tellNoErasedRec :: Hs.Name () -> [Hs.Name ()] -> [Hs.Name ()] -> C ()
+tellNoErasedRec d cs fs = tellNoErased $ Hs.EThingWith () (Hs.NoWildcard ()) (Hs.UnQual () d) (econstr ++ efields)
+  where
+   econstr = map (Hs.ConName ()) cs
+   efields = map (Hs.VarName ()) fs
+
+tellAllCheckable :: Hs.Name () -> C ()
+tellAllCheckable chk = tell $ CompileOutput [] [] [] [chk]
+
+tellUnboxedTuples :: Hs.Boxed -> C ()
+tellUnboxedTuples Hs.Boxed = return ()
+tellUnboxedTuples Hs.Unboxed = tellExtension $ Hs.UnboxedTuples
+
+-- Modify compilation output
+
+addWhereModule :: ModuleName  -> C a -> C a
+addWhereModule mName = local $ \e -> e { whereModules = mName : whereModules e }
+
+addPatBang :: Strictness -> Hs.Pat () -> C (Hs.Pat ())
+addPatBang Strict p = tellExtension Hs.BangPatterns >>
+  return (Hs.PBangPat () p)
+addPatBang Lazy   p = return p
+
+addTyBang :: Strictness -> Hs.Type () -> C (Hs.Type ())
+addTyBang Strict ty = tellExtension Hs.BangPatterns >>
+  return (Hs.TyBang () (Hs.BangedTy ()) (Hs.NoUnpackPragma ()) ty)
+addTyBang Lazy   ty = return ty
+
+maybePrependFixity :: QName -> Fixity -> C [WDecl] -> C [WDecl]
+maybePrependFixity n f comp | f /= noFixity = do
+  hsLvl <- checkFixityLevel n (fixityLevel f)
+  let x = hsName $ prettyShow $ qnameName n
+  let hsAssoc = case fixityAssoc f of
+        NonAssoc   -> Hs.AssocNone ()
+        LeftAssoc  -> Hs.AssocLeft ()
+        RightAssoc -> Hs.AssocRight ()
+  (mkOut (Hs.InfixDecl () hsAssoc hsLvl [Hs.VarOp () x]):) <$> comp
+maybePrependFixity n f comp = comp
+

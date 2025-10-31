@@ -164,9 +164,15 @@ infoFlags =
     , Option []     ["setup"] (NoArg ()) ""
     ]
 
+testResolveStringName :: MonadTCM m => String -> m (Maybe QName)
+testResolveStringName s = do
+  rname <- liftTCM $ resolveName =<< parseName noRange s
+  case rname of
+    DefinedName _ aname _ -> return $ Just $ anameName aname
+    _ -> return Nothing
+
 resolveStringName :: MonadTCM m => String -> m QName
 resolveStringName s = do
-  rname  <- liftTCM $ resolveName =<< parseName noRange s
-  case rname of
-    DefinedName _ aname _ -> return $ anameName aname
-    _ -> liftTCM $ typeError $ CustomBackendError "agda2hs" $ fromString $ "Couldn't find " ++ s
+  testResolveStringName s >>= \case
+    Just aname -> return aname
+    Nothing -> liftTCM $ typeError $ CustomBackendError "agda2hs" $ fromString $ "Couldn't find " ++ s

@@ -1,0 +1,3 @@
+error: [CustomBackendError]
+agda2hs:
+  Illegal module name Fail.PostRtc, conflicts with name generated for runtime checks.

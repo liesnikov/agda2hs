@@ -29,7 +29,8 @@ import Agda2Hs.Compile.Data ( compileData, checkCompileToDataPragma )
 import Agda2Hs.Compile.Function ( compileFun, checkTransparentPragma, checkInlinePragma, checkCompileToFunctionPragma )
 import Agda2Hs.Compile.Name ( hsTopLevelModuleName )
 import Agda2Hs.Compile.Postulate ( compilePostulate )
-import Agda2Hs.Compile.Record ( compileRecord, checkUnboxPragma )
+import Agda2Hs.Compile.Record ( compileRecord, checkUnboxPragma, checkTuplePragma )
+import Agda2Hs.Compile.RuntimeCheckUtils ( importDec )
 import Agda2Hs.Compile.Types
 import Agda2Hs.Compile.Utils
 import Agda2Hs.Config
@@ -93,6 +94,7 @@ compile genv tlm _ def =
   withCurrentModule (qnameModule qname)
     $ runC genv tlm (optRewrites opts)
     $ setCurrentRangeQ qname
+    -- TODO re:rtc @bohdan: reintroduce importDec here
     $ compileAndTag <* postCompile
   where
     opts = globalOptions genv
@@ -114,26 +116,25 @@ compile genv tlm _ def =
       reportSDoc "agda2hs.compile" 15  $ text "Is instance?" <+> prettyTCM isInstance
 
       case (p , theDef def) of
-        (NoPragma            , _         ) -> return []
-        (ExistingClassPragma , _         ) -> return []
-        (UnboxPragma s       , Record{}  ) -> [] <$ checkUnboxPragma def
-        (TransparentPragma   , Function{}) -> [] <$ checkTransparentPragma def
-        (InlinePragma        , Function{}) -> [] <$ checkInlinePragma def
-        (TuplePragma b       , Record{}  ) -> return []
-        (CompileToPragma s   , Datatype{}) -> [] <$ checkCompileToDataPragma def s
-        (CompileToPragma s   , Function{}) -> [] <$ checkCompileToFunctionPragma def s
-
-        (ClassPragma ms      , Record{}  ) -> pure <$> compileRecord (ToClass ms) def
-        (NewTypePragma ds    , Record{}  ) -> pure <$> compileRecord (ToRecord True ds) def
+        (NoPragma            , _         ) -> cnil
+        (ExistingClassPragma , _         ) -> cnil
+        (UnboxPragma s       , Record{}  ) -> cnil <* checkUnboxPragma def
+        (TransparentPragma   , Function{}) -> cnil <* checkTransparentPragma def
+        (InlinePragma        , Function{}) -> cnil <* checkInlinePragma def
+        (TuplePragma b       , Record{}  ) -> cnil <* checkTuplePragma def
+        (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
+        (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
+         -- ^ TODO re:rtc : this isn't entirely correct, compile pragmas can interact with rtc
+        (ClassPragma ms      , Record{}  ) -> compileRecord (ToClass ms) def
+        (NewTypePragma ds    , Record{}  ) -> compileRecord (ToRecord True ds) def
         (NewTypePragma ds    , Datatype{}) -> compileData True ds def
         (DefaultPragma ds    , Datatype{}) -> compileData False ds def
-        (DerivePragma s      , _         ) | isInstance -> pure <$> compileInstance (ToDerivation s) def
-        (DefaultPragma _     , Axiom{}   ) | isInstance -> pure <$> compileInstance (ToDerivation Nothing) def
-        (DefaultPragma _     , _         ) | isInstance -> pure <$> compileInstance ToDefinition def
-        (DefaultPragma _     , Axiom{}   ) -> compilePostulate def
+        (DerivePragma s      , _         ) | isInstance -> cone $ mkOut <$> compileInstance (ToDerivation s) def
+        (DefaultPragma _     , Axiom{}   ) | isInstance -> cone $ mkOut <$> compileInstance (ToDerivation Nothing) def
+        (DefaultPragma _     , _         ) | isInstance -> cone $ mkOut <$> compileInstance ToDefinition def
+        (DefaultPragma _     , Axiom{}   ) -> map mkOut <$> compilePostulate def
         (DefaultPragma _     , Function{}) -> compileFun True def
-        (DefaultPragma ds    , Record{}  ) -> pure <$> compileRecord (ToRecord False ds) def
-
+        (DefaultPragma ds    , Record{}  ) -> compileRecord (ToRecord False ds) def
         _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
 
     postCompile :: C ()
@@ -151,7 +152,7 @@ verifyOutput _ _ _ m ls = do
       let allCons = do
             (r, _) <- ls
             (_, a) <- r
-            Hs.DataDecl _ _ _ _ cons _ <- a
+            Hs.DataDecl _ _ _ _ cons _ <- unrtc <$> a
             Hs.QualConDecl _ _ _ con <- cons
             return $ case con of
               Hs.ConDecl _ n _ -> n
@@ -161,7 +162,7 @@ verifyOutput _ _ _ m ls = do
       when (length duplicateCons > 0) $
         agda2hsErrorM $ vcat (map (\x -> text $ "Cannot generate multiple constructors with the same identifier: " <> Hs.prettyPrint (headWithDefault __IMPOSSIBLE__ x)) duplicateCons)
 
-    ensureNoOutputFromHsModules = unless (null $ concat $ map fst ls) $ do
+    ensureNoOutputFromHsModules = unless (all (null . fst) ls) $ do
       let hsModName = hsTopLevelModuleName m
       case hsModuleKind hsModName of
         HsModule -> do

@@ -33,10 +33,29 @@ data GlobalEnv = GlobalEnv
 
 type ModuleEnv   = TopLevelModuleName
 type ModuleRes   = ()
-type CompiledDef = [Ranged [Hs.Decl ()]]
+type CompiledDef = [Ranged [WDecl]]
 type Ranged a    = (Range, a)
 
 type Code = (Hs.Module Hs.SrcSpanInfo, [Hs.Comment])
+
+data IsRtc = Regular | ExposedRtc | InternalRtc
+  deriving (Eq, Show)
+
+data WithRtc' d = WithRtc'
+  { unrtc :: d,
+    isrtc  :: IsRtc
+  }
+
+instance Functor WithRtc' where
+  fmap f w@(WithRtc' d _) = w { unrtc = f d }
+
+mkOut, mkIRtc, mkERtc :: a -> WithRtc' a
+
+mkOut a = WithRtc' a Regular
+mkIRtc a = WithRtc' a InternalRtc
+mkERtc a = WithRtc' a ExposedRtc
+
+type WDecl = WithRtc' (Hs.Decl ())
 
 -- | Custom substitution for a given definition.
 data Rewrite = Rewrite
@@ -60,12 +79,19 @@ data PreludeOptions = PreludeOpts
   }
   -- ^ whether Prelude functions should be implicitly imported; if yes, then NamesToImport is a "hiding" list
 
+data RtcOption = RtcEnabled | RtcDisabled
+  deriving (Eq, Show)
+
+isRtcEnabled :: RtcOption -> Bool
+isRtcEnabled RtcEnabled  = True
+isRtcEnabled RtcDisabled = False
 
 data Options = Options
   { optIsEnabled  :: Bool
   , optOutDir     :: Maybe FilePath
   , optConfigFile :: Maybe FilePath
   , optExtensions :: [Hs.Extension]
+  , optRtc        :: RtcOption
   , optRewrites   :: SpecialRules
   , optPrelude    :: PreludeOptions
   }
@@ -138,14 +164,19 @@ data CompileOutput = CompileOutput
   -- ^ Haskell import statements.
   , haskellExtensions :: [Hs.KnownExtension]
   -- ^ Required language extensions.
+  , noErased :: [Hs.ExportSpec ()]
+  -- ^ Names of datatypes and their constructors or functions or record and their fields
+  -- | that that can be exposed as is  wrt runtime checks because they have no erased arguments
+  , allCheckable :: [Hs.Name ()]
+  -- ^ Names that can be exposed wrt runtime checks because all erased arguments are checkable
   }
 
 instance Semigroup CompileOutput where
-  CompileOutput imps exts <> CompileOutput imps' exts' =
-    CompileOutput (imps <> imps') (exts <> exts')
+  CompileOutput imps exts ers checks <> CompileOutput imps' exts' ers' checks' =
+    CompileOutput (imps <> imps') (exts <> exts') (ers <> ers') (checks <> checks')
 
 instance Monoid CompileOutput where
-  mempty = CompileOutput mempty mempty
+  mempty = CompileOutput mempty mempty mempty mempty
 
 -- | State used while compiling a single module.
 newtype CompileState = CompileState

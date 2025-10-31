@@ -1,0 +1,3 @@
+test/Fail/RuntimeCheckTransparent.agda:10.1-14: error: [CustomBackendError]
+agda2hs:
+  Cannot make function noTransparent transparent. Transparent functions cannot have erased arguments with runtime checking.

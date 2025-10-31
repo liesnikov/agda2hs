@@ -18,9 +18,10 @@ import Agda.Utils.Impossible ( __IMPOSSIBLE__ )
 import Agda2Hs.AgdaUtils
 
 import Agda2Hs.Compile.Name
-import Agda2Hs.Compile.Type ( compileDomType, compileTeleBinds, compileDom, DomOutput(..) )
+import Agda2Hs.Compile.Type ( compileType, compileDomType, compileTeleBinds, compileDom, DomOutput(..) )
 import Agda2Hs.Compile.Types
 import Agda2Hs.Compile.Utils
+import Agda2Hs.Compile.RuntimeCheckUtils
 
 import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils ( hsName )
@@ -34,9 +35,10 @@ checkNewtype name cs = do
     (Hs.QualConDecl () _ _ (Hs.ConDecl () cName types):_) -> checkNewtypeCon cName types
     _ -> __IMPOSSIBLE__
 
-compileData :: AsNewType -> [Hs.Deriving ()] -> Definition -> C [Hs.Decl ()]
+compileData :: AsNewType -> [Hs.Deriving ()] -> Definition -> C [WDecl]
 compileData newtyp ds def = do
-  let d = hsName $ prettyShow $ qnameName $ defName def
+  let prettyName = prettyShow $ qnameName $ defName def
+      d = hsName prettyName
   checkValidTypeName d
   let Datatype{dataPars = n, dataIxs = numIxs, dataCons = cs} = theDef def
   TelV tel t <- telViewUpTo n (defType def)
@@ -46,14 +48,22 @@ compileData newtyp ds def = do
   binds <- compileTeleBinds False tel -- TODO: add kind annotations?
   addContext tel $ do
     -- TODO: filter out erased constructors
-    cs <- mapM (compileConstructor params) cs
+    (ics, rtc_cs) <- unzip <$> mapM (compileConstructor params) cs
     let hd = foldl (Hs.DHApp ()) (Hs.DHead () d) binds
 
     let target = if newtyp then Hs.NewType () else Hs.DataType ()
 
-    when newtyp (checkNewtype d cs)
+    when newtyp (checkNewtype d ics)
 
-    return [Hs.DataDecl () target Nothing hd cs ds]
+    ecs <- ifM (checkEmitsRtc $ defName def) (getRtcChecks d rtc_cs) (pure [])
+    return $ mkIRtc (Hs.DataDecl () target Nothing hd ics ds) : map mkERtc ecs
+  where
+    getRtcChecks :: Hs.Name () -> [DataRtcResult] -> C [Hs.Decl ()]
+    getRtcChecks d rcs = do
+      let (nonErased, checked) = concatRtc rcs
+      -- Always export data type name
+      tellNoErasedData d nonErased
+      return checked
 
 allIndicesErased :: Type -> C ()
 allIndicesErased t = reduce (unEl t) >>= \case
@@ -64,7 +74,7 @@ allIndicesErased t = reduce (unEl t) >>= \case
     DomForall{}     -> agda2hsError "Not supported: indexed datatypes"
   _ -> return ()
 
-compileConstructor :: [Arg Term] -> QName -> C (Hs.QualConDecl ())
+compileConstructor :: [Arg Term] -> QName -> C (Hs.QualConDecl (), DataRtcResult)
 compileConstructor params c = do
   reportSDoc "agda2hs.data.con" 15 $ text "compileConstructor" <+> prettyTCM c
   reportSDoc "agda2hs.data.con" 20 $ text "  params = " <+> prettyTCM params
@@ -76,7 +86,19 @@ compileConstructor params c = do
   let conName = hsName $ prettyShow $ qnameName c
   checkValidConName conName
   args <- compileConstructorArgs tel
-  return $ Hs.QualConDecl () Nothing Nothing $ Hs.ConDecl () conName args
+  rtc_checks <- ifM (checkEmitsRtc c) (getRtcChecks c ty tel conName) (return NoRtc)
+  return (Hs.QualConDecl () Nothing Nothing $ Hs.ConDecl () conName args, rtc_checks)
+  where
+    getRtcChecks :: QName -> Type -> Telescope -> Hs.Name () -> C DataRtcResult
+    getRtcChecks c ty tel conName = do
+      let conString = prettyShow $ qnameName c
+      smartQName <- smartConstructor c True
+      sig <- Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] <$> compileType (unEl ty)
+      -- export constructor name when none erased, provide signature for smart constructor if it exists
+      checkRtc tel smartQName (Hs.hsVar conString) alternatingLevels >>= \case
+        NoneErased -> return $ DataNoneErased conName
+        Uncheckable -> return DataUncheckable
+        Checkable ds -> return $ DataCheckable $ sig : ds
 
 compileConstructorArgs :: Telescope -> C [Hs.Type ()]
 compileConstructorArgs EmptyTel = return []
@@ -130,11 +152,13 @@ checkCompileToDataPragma def s = noCheckNames $ do
   unless (length rcons == length dcons) $ fail
     "they have a different number of constructors"
   forM_ (zip dcons rcons) $ \(c1, c2) -> do
-    Hs.QualConDecl _ _ _ (Hs.ConDecl _ hsC1 args1) <-
+    -- FIXME: this probably isn't right wrt rtc
+    (Hs.QualConDecl _ _ _ (Hs.ConDecl _ hsC1 args1), _) <-
       addContext dtel $ compileConstructor (teleArgs dtel) c1
     -- rename parameters of r to match those of d
     rtel' <- renameParameters dtel rtel
-    Hs.QualConDecl _ _ _ (Hs.ConDecl _ hsC2 args2) <-
+    -- FIXME: this probably isn't right wrt rtc
+    (Hs.QualConDecl _ _ _ (Hs.ConDecl _ hsC2 args2), _) <-
       addContext rtel' $ compileConstructor (teleArgs rtel') c2
     unless (hsC1 == hsC2) $ fail $
       "name of constructor" <+> text (Hs.pp hsC1) <+>

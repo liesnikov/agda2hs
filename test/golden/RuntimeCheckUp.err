@@ -1,0 +1,3 @@
+test/Fail/RuntimeCheckUp.agda:6.1-9: error: [CustomBackendError]
+agda2hs:
+  Illegal name up, conflicts with name generated for runtime checks.
