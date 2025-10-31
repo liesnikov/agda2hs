@@ -1,7 +1,5 @@
 module Agda2Hs.Compile.Data where
 
-import Data.List ( intercalate)
-
 import Agda.Compiler.Backend
 import Agda.Syntax.Common
 import Agda.Syntax.Internal
@@ -16,7 +14,9 @@ import Agda.TypeChecking.Telescope
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
 import Agda.Utils.Impossible ( __IMPOSSIBLE__ )
+
 import Agda2Hs.AgdaUtils
+
 import Agda2Hs.Compile.Name
 import Agda2Hs.Compile.Type ( compileType, compileDomType, compileTeleBinds, compileDom, DomOutput(..) )
 import Agda2Hs.Compile.Types
@@ -25,6 +25,7 @@ import Agda2Hs.Compile.RuntimeCheckUtils
 
 import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils ( hsName )
+
 import Agda2Hs.Pragma
 
 checkNewtype :: Hs.Name () -> [Hs.QualConDecl ()] -> C ()
@@ -47,20 +48,22 @@ compileData newtyp ds def = do
   binds <- compileTeleBinds False tel -- TODO: add kind annotations?
   addContext tel $ do
     -- TODO: filter out erased constructors
-    chkdCs <- mapM (compileConstructor params) cs
-    chks <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
-      let (noneErased, chks) = concatRtc $ map snd chkdCs
-      -- Always export data type name
-      tellNoErasedData d noneErased
-      return chks
-
-    let cs = map fst chkdCs
-        hd = foldl (Hs.DHApp ()) (Hs.DHead () d) binds
+    (ics, rtc_cs) <- unzip <$> mapM (compileConstructor params) cs
+    let hd = foldl (Hs.DHApp ()) (Hs.DHead () d) binds
 
     let target = if newtyp then Hs.NewType () else Hs.DataType ()
 
-    when newtyp (checkNewtype d cs)
-    return $ mkIRtc (Hs.DataDecl () target Nothing hd cs ds) : map mkERtc chks
+    when newtyp (checkNewtype d ics)
+
+    ecs <- ifM (checkEmitsRtc $ defName def) (getRtcChecks d rtc_cs) (pure [])
+    return $ mkIRtc (Hs.DataDecl () target Nothing hd ics ds) : map mkERtc ecs
+  where
+    getRtcChecks :: Hs.Name () -> [DataRtcResult] -> C [Hs.Decl ()]
+    getRtcChecks d rcs = do
+      let (nonErased, checked) = concatRtc rcs
+      -- Always export data type name
+      tellNoErasedData d nonErased
+      return checked
 
 allIndicesErased :: Type -> C ()
 allIndicesErased t = reduce (unEl t) >>= \case
@@ -80,21 +83,22 @@ compileConstructor params c = do
   ty <- ty `piApplyM` params
   reportSDoc "agda2hs.data.con" 20 $ text "  ty = " <+> prettyTCM ty
   TelV tel _ <- telView ty
-  let conString = prettyShow $ qnameName c
-      conName = hsName conString
-  smartQName <- smartConstructor c True
-
+  let conName = hsName $ prettyShow $ qnameName c
   checkValidConName conName
   args <- compileConstructorArgs tel
-  chk <- ifNotM (checkEmitsRtc c) (return NoRtc) $ do
-    sig <- Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] <$> compileType (unEl ty)
-    -- export constructor name when none erased, provide signature for smart constructor if it exists
-    checkRtc tel smartQName (Hs.hsVar conString) alternatingLevels >>= \case
-      NoneErased -> return $ DataNoneErased conName
-      Uncheckable -> return DataUncheckable
-      Checkable ds -> return $ DataCheckable $ sig : ds
-
-  return (Hs.QualConDecl () Nothing Nothing $ Hs.ConDecl () conName args, chk)
+  rtc_checks <- ifM (checkEmitsRtc c) (getRtcChecks c ty tel conName) (return NoRtc)
+  return (Hs.QualConDecl () Nothing Nothing $ Hs.ConDecl () conName args, rtc_checks)
+  where
+    getRtcChecks :: QName -> Type -> Telescope -> Hs.Name () -> C DataRtcResult
+    getRtcChecks c ty tel conName = do
+      let conString = prettyShow $ qnameName c
+      smartQName <- smartConstructor c True
+      sig <- Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] <$> compileType (unEl ty)
+      -- export constructor name when none erased, provide signature for smart constructor if it exists
+      checkRtc tel smartQName (Hs.hsVar conString) alternatingLevels >>= \case
+        NoneErased -> return $ DataNoneErased conName
+        Uncheckable -> return DataUncheckable
+        Checkable ds -> return $ DataCheckable $ sig : ds
 
 compileConstructorArgs :: Telescope -> C [Hs.Type ()]
 compileConstructorArgs EmptyTel = return []
