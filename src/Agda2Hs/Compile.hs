@@ -90,11 +90,12 @@ moduleSetup genv _ m mifile = do
 compile
   :: GlobalEnv -> ModuleEnv -> IsMain -> Definition
   -> TCM (CompiledDef, CompileOutput)
-compile genv tlm _ def = do
+compile genv tlm _ def =
   withCurrentModule (qnameModule qname)
     $ runC genv tlm (optRewrites opts)
     $ setCurrentRangeQ qname
-    $ compileAndTag <* postCompile -- this is where importDec would be
+    -- TODO re:rtc @bohdan: reintroduce importDec here
+    $ compileAndTag <* postCompile
   where
     opts = globalOptions genv
     qname = defName def
@@ -114,27 +115,6 @@ compile genv tlm _ def = do
 
       reportSDoc "agda2hs.compile" 15  $ text "Is instance?" <+> prettyTCM isInstance
 
-      --case (p , theDef def) of
-      --  (NoPragma            , _         ) -> cnil
-      --  (ExistingClassPragma , _         ) -> cnil
-      --  (UnboxPragma s       , Record{}  ) -> cnil <* checkUnboxPragma def
-      --  (TransparentPragma   , Function{}) -> cnil <* checkTransparentPragma def
-      --  (InlinePragma        , Function{}) -> cnil <* checkInlinePragma def
-      --  (TuplePragma b       , Record{}  ) -> cnil
-      --  (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
-      --  (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
-      --  (ClassPragma ms      , Record{}  ) -> cone $ compileRecord (ToClass ms) def
-      --  (NewTypePragma ds    , Record{}  ) -> cone $ compileRecord (ToRecord True ds) def
-      --  (NewTypePragma ds    , Datatype{}) -> compileData True ds def
-      --  (DefaultPragma ds    , Datatype{}) -> compileData False ds def
-      --  (DerivePragma s      , _         ) | isInstance -> cone $ compileInstance (ToDerivation s) def
-      --  (DefaultPragma _     , Axiom{}   ) | isInstance -> cone $ compileInstance (ToDerivation Nothing) def
-      --  (DefaultPragma _     , _         ) | isInstance -> cone $ compileInstance ToDefinition def
-      --  (DefaultPragma _     , Axiom{}   ) -> compilePostulate def
-      --  (DefaultPragma _     , Function{}) -> compileFun True def
-      --  (DefaultPragma ds    , Record{}  ) -> cone $ compileRecord (ToRecord False ds) def
-      --
-      --  _ -> agda2hsErrorM $ text "Don't know how to compile" <+> prettyTCM (defName def)
       case (p , theDef def) of
         (NoPragma            , _         ) -> cnil
         (ExistingClassPragma , _         ) -> cnil
@@ -142,9 +122,9 @@ compile genv tlm _ def = do
         (TransparentPragma   , Function{}) -> cnil <* checkTransparentPragma def
         (InlinePragma        , Function{}) -> cnil <* checkInlinePragma def
         (TuplePragma b       , Record{}  ) -> cnil <* checkTuplePragma def
-         -- FIXME: this probably isn't right wrt rtc
         (CompileToPragma s   , Datatype{}) -> cnil <* checkCompileToDataPragma def s
         (CompileToPragma s   , Function{}) -> cnil <* checkCompileToFunctionPragma def s
+         -- ^ TODO re:rtc : this isn't entirely correct, compile pragmas can interact with rtc
         (ClassPragma ms      , Record{}  ) -> compileRecord (ToClass ms) def
         (NewTypePragma ds    , Record{}  ) -> compileRecord (ToRecord True ds) def
         (NewTypePragma ds    , Datatype{}) -> compileData True ds def
