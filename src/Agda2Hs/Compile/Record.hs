@@ -20,7 +20,7 @@ import Agda.TypeChecking.Telescope
 
 import Agda.Utils.Singleton
 import Agda.Utils.Impossible ( __IMPOSSIBLE__ )
-import Agda.Utils.Monad ( ifNotM, whenM )
+import Agda.Utils.Monad ( whenM, unlessM, ifM )
 
 import Agda2Hs.AgdaUtils
 import Agda2Hs.Compile.ClassInstance
@@ -110,7 +110,7 @@ compileRecord target def = do
     case target of
       ToClass ms -> do
         whenM (checkEmitsRtc $ defName def) $
-          whenM (not <$> checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
+          unlessM (checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
              "Cannot compile" <+> prettyTCM (defName def) <+> "to class." <+>
              "Classes cannot have erased arguments with runtime checking."
         when (length binds > 1) $ tellExtension Hs.MultiParamTypeClasses
@@ -123,36 +123,23 @@ compileRecord target def = do
         let cd = Hs.ClassDecl () context hd [] (Just (classDecls ++ map (Hs.ClsDecl ()) defaultDecls))
         return $ mkIRtc cd : map mkERtc []
       ToRecord newtyp ds -> do
-        smartQName <- smartConstructor (defName def) False
-
         checkValidConName cName
         when (theEtaEquality recEtaEquality' == YesEta) $ agda2hsErrorM $
           "Agda records compiled to Haskell should have eta-equality disabled." <+>
           "Add no-eta-equality to the definition of" <+> (text (pp rName) <> ".")
         (constraints, fieldDecls, fieldNames, fieldTypes) <- compileRecFields fieldDecl recFields fieldTel
 
-        chk <- ifNotM (checkEmitsRtc $ defName def) (return []) $ do
-          let scType = foldr (Hs.TyFun ()) (Hs.TyVar () $ Hs.Ident () rString) fieldTypes
-              sig = Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] scType
-          (noneErasedCons, chk) <- checkRtc fieldTel smartQName (Hs.hsVar conString) recordLevels >>= \case
-            NoneErased -> return ([cName], [])
-            Uncheckable -> return ([], [])
-            Checkable ds -> return ([], sig : ds)
-          -- Always export record name and field names. Export constructor when it has no erased types.
-          tellNoErasedRec rName noneErasedCons fieldNames
-          return chk
-
         when newtyp $ checkNewtypeCon cName fieldDecls
         let target = if newtyp then Hs.NewType () else Hs.DataType ()
         drc <- compileDataRecord constraints fieldDecls target hd ds
-        return $ mkIRtc drc : map mkERtc chk
+
+        rtc_checks <- ifM (checkEmitsRtc $ defName def) (getRtcChecks fieldTel fieldNames fieldTypes) (return [])
+        return $ mkIRtc drc : map mkERtc rtc_checks
   where
-    rQName = defName def
-    rString = prettyShow $ qnameName rQName
+    rString = prettyShow $ qnameName $ defName def
     rName = hsName rString
-    conQName | recNamedCon = conName recConHead
-             | otherwise   = rQName   -- Reuse record name for constructor if no given name
-    conString = prettyShow . qnameName $ conQName
+    conString | recNamedCon = prettyShow . qnameName $ conName recConHead
+              | otherwise   = rString   -- Reuse record name for constructor if no given name
     cName = hsName conString
 
     -- In Haskell, projections live in the same scope as the record type, so check here that the
@@ -208,6 +195,19 @@ compileRecord target def = do
       let conDecl = Hs.QualConDecl () Nothing Nothing $ Hs.RecDecl () cName fieldDecls
       return $ Hs.DataDecl () don Nothing hd [conDecl] ds
 
+    getRtcChecks :: Telescope -> [Hs.Name ()] -> [Hs.Type ()] -> C [Hs.Decl ()]
+    getRtcChecks fieldTel fieldNames fieldTypes = do
+      smartQName <- smartConstructor (defName def) False
+      let scType = foldr (Hs.TyFun ()) (Hs.TyVar () $ Hs.Ident () rString) fieldTypes
+          sig = Hs.TypeSig () [hsName $ prettyShow $ qnameName smartQName] scType
+      (noneErasedCons, chk) <- checkRtc fieldTel smartQName (Hs.hsVar conString) recordLevels >>= \case
+        NoneErased -> return ([cName], [])
+        Uncheckable -> return ([], [])
+        Checkable ds -> return ([], sig : ds)
+      -- Always export record name and field names. Export constructor when it has no erased types.
+      tellNoErasedRec rName noneErasedCons fieldNames
+      return chk
+
 checkUnboxPragma :: Definition -> C ()
 checkUnboxPragma def = do
   let Record{..} = theDef def
@@ -223,7 +223,7 @@ checkUnboxPragma def = do
     pars <- getContextArgs
     let fieldTel = recTel `apply` pars
     whenM (checkEmitsRtc $ defName def) $
-        whenM (not <$> checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
+        unlessM (checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
           "Cannot make record" <+> prettyTCM (defName def) <+> "unboxed." <+>
           "Unboxed records cannot have erased arguments in their fields with runtime checking."
     fields <- nonErasedFields fieldTel
@@ -248,6 +248,6 @@ checkTuplePragma def = do
     pars <- getContextArgs
     let fieldTel = recTel `apply` pars
     whenM (checkEmitsRtc $ defName def) $
-        whenM (not <$> checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
+        unlessM (checkNoneErased fieldTel recordLevels) $ agda2hsErrorM $
           "Cannot compile record" <+> prettyTCM (defName def) <+> "as tuple." <+>
           "Tuple records cannot have erased arguments in their fields with runtime checking."
