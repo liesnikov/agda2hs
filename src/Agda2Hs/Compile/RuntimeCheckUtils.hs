@@ -1,4 +1,4 @@
-module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, RtcResult (..), checkRtc, renderAllExports) where
+module Agda2Hs.Compile.RuntimeCheckUtils (importDec, checkNoneErased, smartConstructor, NestedLevel (Odd), alternatingLevels, recordLevels, DataRtcResult(..), concatRtc, RtcResult (..), checkRtc, renderAllExports) where
 
 import Agda.Syntax.Common
 import Agda.Syntax.Common.Pretty (prettyShow)
@@ -39,7 +39,7 @@ import qualified Language.Haskell.Exts as Hs
 -- based on Agda.Syntax.Translation.ConcreteToAbstract.importPrimitives
 importDec :: TCM ()
 importDec = do
-  -- these args to NiceEnv shouldn't be used
+  -- these args to NiceEnv aren't being used by the caller `runNice`
   let niceEnv = NiceEnv __IMPOSSIBLE__ __IMPOSSIBLE__
       qualify = AN.Qual (AC.simpleName "Haskell") . AN.Qual (AC.simpleName "Extra")
       decname = AC.QName $ AC.simpleName "Dec"
@@ -108,6 +108,22 @@ checkTopOrDataErased d (_ : ls) = do
       quantities = getQuantity d : map getQuantity unfold
   domDropped <- (DODropped ==) <$> compileDom domType
   (or (domDropped : [True | Quantity0 _ <- quantities]) ||) . not . and <$> mapM (`checkNoneErased` ls) tels
+
+-- runtime check results for data and records
+data DataRtcResult
+  = NoRtc
+  | DataNoneErased (Hs.Name ())
+  | DataUncheckable
+  | DataCheckable [Hs.Decl ()]
+
+concatRtc :: [DataRtcResult] -> ([Hs.Name ()], [Hs.Decl ()])
+concatRtc [] = ([], [])
+concatRtc (res : ress) = case res of
+  DataNoneErased s -> (s : tlNoneErased, tlCheckable)
+  DataCheckable ds -> (tlNoneErased, ds ++ tlCheckable)
+  _ -> tl
+  where
+    tl@(tlNoneErased, tlCheckable) = concatRtc ress
 
 -- External runtime check result
 data RtcResult

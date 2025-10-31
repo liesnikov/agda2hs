@@ -27,21 +27,6 @@ import qualified Agda2Hs.Language.Haskell as Hs
 import Agda2Hs.Language.Haskell.Utils ( hsName )
 import Agda2Hs.Pragma
 
-data DataRtcResult
-  = NoRtc
-  | DataNoneErased (Hs.Name ())
-  | DataUncheckable
-  | DataCheckable [Hs.Decl ()]
-
-concatRtc :: [DataRtcResult] -> ([Hs.Name ()], [Hs.Decl ()])
-concatRtc [] = ([], [])
-concatRtc (res : ress) = case res of
-  DataNoneErased s -> (s : tlNoneErased, tlCheckable)
-  DataCheckable ds -> (tlNoneErased, ds ++ tlCheckable)
-  _ -> tl
-  where
-    tl@(tlNoneErased, tlCheckable) = concatRtc ress
-
 checkNewtype :: Hs.Name () -> [Hs.QualConDecl ()] -> C ()
 checkNewtype name cs = do
   checkSingleElement name cs "Newtype must have exactly one constructor in definition"
