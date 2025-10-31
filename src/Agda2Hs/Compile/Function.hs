@@ -7,7 +7,6 @@ import Control.Monad.Reader ( asks, local )
 import Data.Generics
 import Data.List
 import Data.Maybe ( fromMaybe, isJust )
-import Data.Functor (($>))
 import qualified Data.Text as Text
 
 import Agda.Compiler.Backend
@@ -22,7 +21,7 @@ import Agda.Syntax.Scope.Monad ( isDatatypeModule )
 
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Substitute
-import Agda.TypeChecking.Telescope
+import Agda.TypeChecking.Telescope ( telView, mustBePi, piApplyM )
 import Agda.TypeChecking.Sort ( ifIsSort )
 import Agda.TypeChecking.Datatypes ( getConType, isDataOrRecord )
 import Agda.TypeChecking.Records ( getDefType )
@@ -96,17 +95,17 @@ compileLitNatPat = \case
   p -> agda2hsErrorM $ "not a literal natural number pattern:" <?> prettyTCM p
 
 
-compileFun, compileFun'
-  :: Bool -- ^ Whether the type signature should also be generated
-  -> Definition -> C [WDecl]
-
 -- "compileFun No Wrappers"
 -- strips all RTC wrappers from compileFun output
 compileFunNW, compileFunNW'
-  :: Bool -- ^ Whether the type signature shuuld also be generated
+  :: Bool -- ^ Whether the type signature should also be generated
   -> Definition -> C [Hs.Decl ()]
 compileFunNW  b d = map unrtc <$> compileFun b d
-compileFunNW' b d = map unrtc <$> compileFun' b d
+compileFunNW' b d = map unrtc <$> compileFun b d
+
+compileFun, compileFun'
+  :: Bool -- ^ Whether the type signature should also be generated
+  -> Definition -> C [WDecl]
 
 compileFun withSig def@Defn{..} =
   setCurrentRangeQ defName
@@ -170,18 +169,11 @@ compileFun' withSig def@Defn{..} = inTopContext $ withCurrentModule m $ do
             text "Functions defined with absurd patterns exclusively are not supported."
         <+> text "Use function `error` from the Haskell.Prelude instead."
 
-      let def = sig ++ [Hs.FunBind () cs]
-      irtc <- checkEmitsRtc defName
-      let mdef = map (if irtc then mkIRtc else mkOut) def
-      chk <- ifNotM (checkEmitsRtc defName) (return []) $ do
-        let typeTel = theTel $ telView' defType
-            success = Hs.hsVar $ prettyShow m ++ ".PostRtc." ++ prettyShow n
-        check <- checkRtc typeTel defName success alternatingLevels
-        case check of
-          NoneErased -> tellNoErasedFun x $> []
-          Uncheckable -> return []
-          Checkable ds -> return $ mkERtc <$> sig ++ ds
-      return $ mdef ++ chk
+      rtc <- checkEmitsRtc defName
+      let defwrap = if rtc then mkIRtc else mkOut
+          def = map defwrap $ sig ++ [Hs.FunBind () cs]
+      rtc_checks <- if rtc then getRtcChecks x sig else return []
+      return $ def ++ rtc_checks
   where
     Function{..} = theDef
     m = qnameModule defName
@@ -192,6 +184,16 @@ compileFun' withSig def@Defn{..} = inTopContext $ withCurrentModule m $ do
     addPats [] cl = cl
     addPats ps (Hs.Match l f qs rhs bs) = Hs.Match l f (ps++qs) rhs bs
     addPats (p:ps) (Hs.InfixMatch l q f qs rhs bs) = Hs.InfixMatch l p f (ps++q:qs) rhs bs
+
+    getRtcChecks :: Hs.Name () -> [Hs.Decl ()] -> C [WDecl]
+    getRtcChecks x sig = do
+      let typeTel = theTel $ telView' defType
+          success = Hs.hsVar $ prettyShow m ++ ".PostRtc." ++ prettyShow n
+      rtcres <- checkRtc typeTel defName success alternatingLevels
+      case rtcres of
+        NoneErased -> return [] <* tellNoErasedFun x
+        Uncheckable -> return []
+        Checkable ds -> return $ mkERtc <$> sig ++ ds
 
 compileModuleParams :: Telescope -> C (Hs.Type () -> Hs.Type () , [Hs.Pat ()])
 compileModuleParams EmptyTel = return (id, [])
@@ -396,9 +398,9 @@ withClauseLocals curModule c@Clause{..} k = do
 checkTransparentPragma :: Definition -> C ()
 checkTransparentPragma def = do
   whenM (checkEmitsRtc $ defName def) $
-    whenM (not <$> checkNoneErased tele alternatingLevels) $ agda2hsErrorM $
-        "Cannot make function" <+> prettyTCM (defName def) <+> "transparent." <+>
-        "Transparent functions cannot have erased arguments with runtime checking."
+    unlessM (checkNoneErased (theTel . telView' $ defType def) alternatingLevels) $ agda2hsErrorM $
+      "Cannot make function" <+> prettyTCM (defName def) <+> "transparent." <+>
+      "Transparent functions cannot have erased arguments with runtime checking."
   compiledFun <- compileFunNW False def
   case compiledFun of
     [Hs.FunBind _ cls] ->
@@ -407,8 +409,6 @@ checkTransparentPragma def = do
       checkTransparentTypeDef hd b
     _ -> __IMPOSSIBLE__
   where
-    tele = theTel $ telView' $ defType def
-
     checkTransparentClause :: Hs.Match () -> C ()
     checkTransparentClause = \case
       Hs.Match _ _ [p] (Hs.UnGuardedRhs _ e) _ | patToExp p == Just e -> return ()
@@ -427,11 +427,10 @@ checkTransparentPragma def = do
 checkInlinePragma :: Definition -> C ()
 checkInlinePragma def@Defn{defName = f, defType = ty} = do
   let Function{funClauses = cs} = theDef def
-      typeTel = theTel $ telView' ty
   whenM (checkEmitsRtc $ defName def) $
-    whenM (not <$> checkNoneErased typeTel alternatingLevels) $ agda2hsErrorM $
-        "Cannot make function" <+> prettyTCM (defName def) <+> "inlinable." <+>
-        "Inline functions cannot have erased arguments with runtime checking."
+    unlessM (checkNoneErased (theTel $ telView' ty) alternatingLevels) $ agda2hsErrorM $
+      "Cannot make function" <+> prettyTCM (defName def) <+> "inlinable." <+>
+      "Inline functions cannot have erased arguments with runtime checking."
   case filter (isJust . clauseBody) cs of
     [c] ->
       unlessM (allowedPats (namedClausePats c)) $ agda2hsErrorM $
@@ -481,7 +480,7 @@ checkCompileToFunctionPragma def s = noCheckNames $ do
     "does not match the type" <+> text (Hs.pp rtype) <+> "of" <+> prettyTCM r
   -- Check that clauses match
   reportSDoc "agda2hs.compileto" 20 $ "Checking that clauses of" <+> ppd <+> "matches those of" <+> ppr
-  -- FIXME: this probably isn't right wrt rtc
+  -- FIXME re:rtc : this probably isn't right wrt rtc
   [Hs.FunBind _ dcls] <- compileFunNW False def
   [Hs.FunBind _ rcls] <- compileFunNW False rdef
   unless (length dcls == length rcls) $ fail $
