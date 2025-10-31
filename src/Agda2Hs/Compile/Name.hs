@@ -33,7 +33,7 @@ import Agda.TypeChecking.Warnings ( warning )
 
 import qualified Agda.Utils.List1 as List1
 import Agda.Utils.Maybe
-import Agda.Utils.Monad ( orM, ifNotM, whenM )
+import Agda.Utils.Monad ( orM, whenM, ifM )
 
 import Agda2Hs.AgdaUtils
 import Agda2Hs.Compile.Types
@@ -111,7 +111,7 @@ compileQName f = do
     parent <- parentName f
     par <- traverse (compileName . qnameName) parent
     let mod0 = qnameModule $ fromMaybe f parent
-    (mkind, mod) <- compileModuleName mod0
+    (mkind, mod@(Hs.ModuleName () mods)) <- compileModuleName mod0
 
     existsInHaskell <- orM
       [ pure $ isJust special
@@ -128,9 +128,8 @@ compileQName f = do
       typeError $ CustomBackendError "agda2hs" $ P.text $
         "Symbol " ++ Hs.prettyPrint hf ++ " is missing a COMPILE pragma or rewrite rule"
 
-    modRtc <- ifNotM (checkEmitsRtc f) (return mod) $ case mod of
-      Hs.ModuleName () s -> do
-        return $ Hs.ModuleName () $ s ++ ".PostRtc"
+    modRtc <- ifM (checkEmitsRtc f) (return $ Hs.ModuleName () $ mods ++ ".PostRtc") (return mod)
+
     currMod <- asks $ hsTopLevelModuleName . currModule
     let skipModule = mod == currMod
                   || isJust mimpBuiltin
@@ -189,7 +188,6 @@ compileQName f = do
                  isDataMod <- isJust <$> isDatatypeModule (amodName amname)
                  return $ QualifiedAs (if isDataMod then Nothing else Just qual)
                _ -> return $ QualifiedAs Nothing
-
         _ -> return $ QualifiedAs Nothing
 
     qualify :: Hs.ModuleName () -> Hs.Name () -> Qualifier -> Hs.QName ()
